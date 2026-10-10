@@ -3618,6 +3618,18 @@ evidence = ["crates/ui-egui/tests/comments.rs::shapes_and_ink_are_drawn_by_dragg
 notes = "one ink annotation per stroke; strokes are drawn as smooth curves through their points, as in Acrobat"
 
 [[feature]]
+id = "comment.pencil-pressure"
+title = "Apple Pencil drawing with pressure (iPad)"
+area = "E"
+tier = "P2"
+milestone = "M5"
+status = "partial"
+commands = ["comment.ink"]
+tools = ["comment_add"]
+evidence = ["crates/annot/src/tests.rs::pencil_pressure_draws_a_stroke_that_thickens_where_pressed", "crates/annot/src/tests.rs::erasing_a_pencil_stroke_keeps_each_pieces_pressure", "crates/ui-egui/tests/tablet.rs::the_pencil_draws_ink_that_follows_its_pressure", "crates/ui-egui/tests/tablet.rs::a_palm_on_the_page_while_the_pencil_draws_changes_nothing", "crates/automation/tests/automation.rs::pressure_sensitive_ink_through_tools"]
+notes = "PdfCraft for iPad (apps/pdfcraft-ios): the Pencil draws, fingers scroll, zoom and tap, palms are ignored; stroke width follows pressure (standard /InkList plus /PCPressure, drawn as a filled outline). Missing: tilt and barrel roll (egui-winit drops them), Pencil hover, squeeze and double-tap (need UIKit interactions winit lacks), coalesced 240 Hz samples (one sample per frame). Tested in the iOS Simulator and headless UI tests, not yet on hardware"
+
+[[feature]]
 id = "comment.eraser"
 title = "Eraser for ink strokes"
 area = "E"

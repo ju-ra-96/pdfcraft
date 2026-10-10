@@ -2105,3 +2105,9 @@
 	The field {name} no longer exists.	字段 {name} 已不存在。
 	A selected field has no widget on any page, so the fields can't be edited together.	某个所选字段在任何页面上都没有控件，因此无法一起编辑这些字段。
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	（{n} 张以可绘制的最大尺寸 {dpi} dpi 导出）
+# PdfCraft for iPad: the in-app document picker.
+	Documents	文稿
+	Choose this folder	选择此文件夹
+	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	这里还没有文件。请将文件放到“文件”›“我的 iPad”›“PdfCraft”中。
+	“{name}” already exists. Save again to replace it.	“{name}”已存在。再次保存即可替换。
+	Only the Apple Pencil draws; fingers scroll and zoom	仅用 Apple Pencil 绘图；手指用于滚动和缩放

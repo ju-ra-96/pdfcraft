@@ -24,8 +24,8 @@ pub enum FilePurpose {
 }
 
 /// The picker for `purpose`: PDFs, and for Create and Insert also what they convert.
-fn files_picker(purpose: FilePurpose) -> rfd::AsyncFileDialog {
-    let dialog = rfd::AsyncFileDialog::new();
+fn files_picker(purpose: FilePurpose) -> crate::dialog::AsyncFileDialog {
+    let dialog = crate::dialog::AsyncFileDialog::new();
     if purpose == FilePurpose::RedactWords {
         return dialog.add_filter(tl!("Text"), &["txt"]);
     }
@@ -535,7 +535,7 @@ impl PdfCraftApp {
             match &self.export_dir_override {
                 Some(d) => write(self, std::path::PathBuf::from(d)),
                 None => {
-                    self.ask_one(crate::pickers::Ask::Folder(rfd::AsyncFileDialog::new().set_title(title)), None, write);
+                    self.ask_one(crate::pickers::Ask::Folder(crate::dialog::AsyncFileDialog::new().set_title(title)), None, write);
                 }
             }
         }
@@ -657,7 +657,7 @@ impl PdfCraftApp {
                 Some(p) if [".xfdf", ".fdf", ".xml", ".csv", ".txt"].iter().any(|e| p.ends_with(e)) => import(self, p.into()),
                 Some(_) => {}
                 None => {
-                    let dialog = rfd::AsyncFileDialog::new()
+                    let dialog = crate::dialog::AsyncFileDialog::new()
                         .add_filter(tl!("Comment and form data").to_string(), &["xfdf", "fdf", "xml", "csv", "txt"])
                         .set_title(tl!("Import data").to_string());
                     let target = self.active_ids().map(|(_, id)| id);
@@ -690,7 +690,7 @@ impl PdfCraftApp {
             match self.save_override.clone() {
                 Some(p) => write(self, p.into()),
                 None => {
-                    let dialog = rfd::AsyncFileDialog::new()
+                    let dialog = crate::dialog::AsyncFileDialog::new()
                         .set_title(tl!("Export").to_string())
                         .add_filter(ext.to_uppercase(), &[ext])
                         .set_file_name(format!("{stem}.{ext}"));
@@ -709,7 +709,7 @@ impl PdfCraftApp {
     pub fn merge_data_dialog(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let dialog = rfd::AsyncFileDialog::new()
+            let dialog = crate::dialog::AsyncFileDialog::new()
                 .set_title(tl!("Select data files to merge").to_string())
                 .add_filter(tl!("Form data and PDF forms").to_string(), &["fdf", "xfdf", "pdf"]);
             self.ask(crate::pickers::Ask::Files(dialog), None, |app, paths| {
@@ -754,7 +754,7 @@ impl PdfCraftApp {
             match self.save_override.clone() {
                 Some(p) => write(self, p.into()),
                 None => {
-                    let dialog = rfd::AsyncFileDialog::new()
+                    let dialog = crate::dialog::AsyncFileDialog::new()
                         .set_title(tl!("Save the spreadsheet").to_string())
                         .add_filter("CSV", &["csv"])
                         .set_file_name("report.csv");
@@ -795,7 +795,7 @@ impl PdfCraftApp {
                 Some(p) => write(self, p.into()),
                 None => {
                     let title = if comments { tl!("Export comments") } else { tl!("Export form data") };
-                    let d = rfd::AsyncFileDialog::new().set_title(title).set_file_name(format!("{stem}.xfdf"));
+                    let d = crate::dialog::AsyncFileDialog::new().set_title(title).set_file_name(format!("{stem}.xfdf"));
                     let d = if comments {
                         d.add_filter("XFDF", &["xfdf"]).add_filter("FDF", &["fdf"])
                     } else {

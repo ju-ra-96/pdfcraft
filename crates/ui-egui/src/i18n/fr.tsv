@@ -2141,3 +2141,9 @@ signature pad	Type	Saisir
 	The field {name} no longer exists.	Le champ {name} n'existe plus.
 	A selected field has no widget on any page, so the fields can't be edited together.	Un champ sélectionné n'a de widget sur aucune page : les champs ne peuvent pas être modifiés ensemble.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} à {dpi} ppp, la plus grande taille possible pour les dessiner)
+# PdfCraft for iPad: the in-app document picker.
+	Documents	Documents
+	Choose this folder	Choisir ce dossier
+	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Rien pour l’instant. Placez des fichiers dans Fichiers › Sur mon iPad › PdfCraft.
+	“{name}” already exists. Save again to replace it.	« {name} » existe déjà. Enregistrez à nouveau pour le remplacer.
+	Only the Apple Pencil draws; fingers scroll and zoom	Seul l’Apple Pencil dessine ; les doigts font défiler et zoomer

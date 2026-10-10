@@ -45,17 +45,17 @@ pub enum PickFor {
 /// Which native panel to show.
 pub(crate) enum Ask {
     /// Choose one existing file.
-    File(rfd::AsyncFileDialog),
+    File(crate::dialog::AsyncFileDialog),
     /// Choose one or more existing files.
-    Files(rfd::AsyncFileDialog),
+    Files(crate::dialog::AsyncFileDialog),
     /// Choose a folder.
-    Folder(rfd::AsyncFileDialog),
+    Folder(crate::dialog::AsyncFileDialog),
     /// Choose where to save a file.
-    Save(rfd::AsyncFileDialog),
+    Save(crate::dialog::AsyncFileDialog),
 }
 
 /// What to do with the chosen paths, on a later frame.
-type Then = Box<dyn FnOnce(&mut PdfCraftApp, Vec<PathBuf>) + Send>;
+pub(crate) type Then = Box<dyn FnOnce(&mut PdfCraftApp, Vec<PathBuf>) + Send>;
 
 /// A finished pick, waiting for the next frame.
 struct Picked {
@@ -71,6 +71,13 @@ impl std::fmt::Debug for Picked {
     }
 }
 
+/// The in-app picker on screen (iPadOS), with what to do with its choice.
+pub(crate) struct InAppPending {
+    pub(crate) pick: crate::in_app_picker::InAppPick,
+    pub(crate) target: Option<PickTarget>,
+    pub(crate) then: Then,
+}
+
 /// Pickers in flight and the picks they finished.
 #[derive(Clone, Debug, Default)]
 pub struct Pickers {
@@ -80,9 +87,12 @@ pub struct Pickers {
     done: Arc<Mutex<Vec<Picked>>>,
 }
 
-/// Clears `showing` if the worker ends without queueing a pick (it panicked).
+/// Clears `showing` if the worker ends without queueing a pick (it panicked). Native pickers
+/// only: iPadOS uses the in-app picker, which needs no worker.
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 struct Showing(Option<Arc<AtomicBool>>);
 
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 impl Showing {
     /// The pick is queued: the frame that uses it clears the flag.
     fn hand_over(mut self) {
@@ -98,6 +108,7 @@ impl Drop for Showing {
     }
 }
 
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 impl Pickers {
     /// Wait for `pick` on a worker thread and queue its result for the next frame. On macOS
     /// `pick` must already have shown the picker (rfd starts the panel when the future is
@@ -129,9 +140,9 @@ impl Pickers {
             .ok()
     }
 
-    /// Queue a pick that is already known (tests and automation). Like a real pick, it keeps
-    /// the flag until the frame uses it.
-    fn deliver(&self, target: Option<PickTarget>, paths: Vec<PathBuf>, then: Then) {
+    /// Queue a pick that is already known (tests, automation and the in-app picker). Like a
+    /// real pick, it keeps the flag until the frame uses it.
+    pub(crate) fn deliver(&self, target: Option<PickTarget>, paths: Vec<PathBuf>, then: Then) {
         self.done.lock().unwrap_or_else(PoisonError::into_inner).push(Picked { target, paths, then });
     }
 
@@ -143,7 +154,7 @@ impl Pickers {
 impl PdfCraftApp {
     /// Show a native picker for `pick_for` without blocking the frame. The choice is used on a
     /// later frame by [`Self::process_picked`].
-    pub(crate) fn pick(&mut self, pick_for: PickFor, dialog: rfd::AsyncFileDialog, multiple: bool) {
+    pub(crate) fn pick(&mut self, pick_for: PickFor, dialog: crate::dialog::AsyncFileDialog, multiple: bool) {
         // Insert and Replace edit the active document: remember which one.
         let target = match pick_for {
             PickFor::Files(purpose) if purpose.edits_active_document() => self.active_ids().map(|(_, id)| id),
@@ -178,9 +189,14 @@ impl PdfCraftApp {
             self.pickers.deliver(target, paths.into_iter().map(PathBuf::from).collect(), then);
             return true;
         }
+        #[cfg(target_os = "ios")]
+        return self.ask_in_app(ask, target, then);
         // On macOS creating the future shows the panel; it must happen here, on the main thread.
+        #[cfg(not(target_os = "ios"))]
         let ctx = self.ctx.clone();
+        #[cfg(not(target_os = "ios"))]
         let one = |h: Option<rfd::FileHandle>| h.map(|h| h.path().to_path_buf()).into_iter().collect::<Vec<_>>();
+        #[cfg(not(target_os = "ios"))]
         let started = match ask {
             Ask::File(d) => {
                 let pick = d.pick_file();
@@ -204,11 +220,36 @@ impl PdfCraftApp {
                 )
             }
         };
+        #[cfg(not(target_os = "ios"))]
         if !started {
             self.pickers.showing.store(false, Ordering::SeqCst);
             self.notify_tr("Couldn't show the file picker. Please try again.");
         }
+        #[cfg(not(target_os = "ios"))]
         started
+    }
+
+    /// iPadOS: show the in-app picker over the Documents folder ([`crate::in_app_picker`]); its
+    /// choice reaches `then` through the same queue as a native pick.
+    #[cfg(target_os = "ios")]
+    fn ask_in_app(&mut self, ask: Ask, target: Option<PickTarget>, then: Then) -> bool {
+        use crate::in_app_picker::{InAppPick, Kind};
+        let Some(root) = self.documents_dir.clone() else {
+            self.pickers.showing.store(false, Ordering::SeqCst);
+            self.notify_tr("Couldn't show the file picker. Please try again.");
+            return false;
+        };
+        let (kind, dialog) = match ask {
+            Ask::File(d) => (Kind::File, d),
+            Ask::Files(d) => (Kind::Files, d),
+            Ask::Folder(d) => (Kind::Folder, d),
+            Ask::Save(d) => (Kind::Save, d),
+        };
+        self.in_app_pick = Some(InAppPending { pick: InAppPick::new(kind, dialog, root), target, then });
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
+        }
+        true
     }
 
     /// [`Self::ask`] for one path: `then` gets the first chosen path.
@@ -296,7 +337,7 @@ mod tests {
         app.pickers.showing.store(true, Ordering::SeqCst);
         let got = Arc::new(Mutex::new(Vec::new()));
         let into = got.clone();
-        assert!(!app.ask(Ask::File(rfd::AsyncFileDialog::new()), None, move |_, paths| into.lock().unwrap().extend(paths)));
+        assert!(!app.ask(Ask::File(crate::dialog::AsyncFileDialog::new()), None, move |_, paths| into.lock().unwrap().extend(paths)));
         app.process_picked();
         assert!(got.lock().unwrap().is_empty());
         assert!(app.pickers.showing.load(Ordering::SeqCst), "the showing picker still owns the flag");
@@ -309,12 +350,12 @@ mod tests {
         app.pick_override = Some(vec!["first.fdf".into()]);
         let got = Arc::new(Mutex::new(Vec::new()));
         let into = got.clone();
-        assert!(app.ask(Ask::Files(rfd::AsyncFileDialog::new()), None, move |app, _| {
+        assert!(app.ask(Ask::Files(crate::dialog::AsyncFileDialog::new()), None, move |app, _| {
             // Merge data: the spreadsheet's save picker, asked from the first pick's closure.
-            assert!(app.ask(Ask::Save(rfd::AsyncFileDialog::new()), None, move |_, paths| into.lock().unwrap().extend(paths)));
+            assert!(app.ask(Ask::Save(crate::dialog::AsyncFileDialog::new()), None, move |_, paths| into.lock().unwrap().extend(paths)));
         }));
         // Another command asks for a picker before the frame uses the first pick: refused.
-        assert!(!app.ask(Ask::File(rfd::AsyncFileDialog::new()), None, |_, _| panic!("must not run")));
+        assert!(!app.ask(Ask::File(crate::dialog::AsyncFileDialog::new()), None, |_, _| panic!("must not run")));
         app.process_picked();
         app.process_picked();
         assert_eq!(*got.lock().unwrap(), vec![PathBuf::from("first.fdf")], "the chained picker answered");

@@ -3593,3 +3593,33 @@ fn command_batch_refuses_more_than_a_thousand_steps() {
     let err = a.call("command_batch", &json!({"steps": steps})).unwrap_err();
     assert!(err.to_string().contains("at most 1000 steps"), "{err}");
 }
+
+/// Apple Pencil strokes through the tools: `pressure` (0–1 per point) draws a stroke that is
+/// wider where pressed harder, so its rectangle has room for the widest point.
+#[test]
+fn pressure_sensitive_ink_through_tools() {
+    let dir = workdir("pressure-ink");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let stroke = |y: f64| json!([[[20, y], [60, y], [100, y], [140, y]]]);
+    ok(&mut a, "comment_add", json!({ "doc": doc, "page": 1, "type": "ink", "width": 4, "strokes": stroke(100.0) }));
+    ok(
+        &mut a,
+        "comment_add",
+        json!({ "doc": doc, "page": 1, "type": "ink", "width": 4, "strokes": stroke(200.0), "pressure": [[0.1, 0.6, 1.0, 0.3]] }),
+    );
+    let list = ok(&mut a, "comment_list", json!({ "doc": doc, "page": 1 }));
+    let heights: Vec<f64> = list["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["type"] == "Ink")
+        .map(|c| c["rect"][3].as_f64().unwrap() - c["rect"][1].as_f64().unwrap())
+        .collect();
+    assert_eq!(heights.len(), 2, "{list}");
+    assert!(heights[1] > heights[0] + 2.0, "room for the widest point: {heights:?}");
+    for bad in [json!([[0.1, 0.6]]), json!([[0.1, 0.6, 1.5, 0.3]]), json!("hard"), json!([[0.1, "x", 1.0, 0.3]])] {
+        let r = a.call("comment_add", &json!({ "doc": doc, "page": 1, "type": "ink", "strokes": stroke(300.0), "pressure": bad }));
+        assert!(matches!(&r, Err(ToolError::InvalidArgs(m)) if m.contains("pressure")), "{bad}: {r:?}");
+    }
+}

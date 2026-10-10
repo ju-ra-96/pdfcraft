@@ -185,7 +185,7 @@ impl PdfCraftApp {
     pub fn pin_folder_dialog(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let dialog = rfd::AsyncFileDialog::new().set_title(tl!("Pin a folder to Home").to_string());
+            let dialog = crate::dialog::AsyncFileDialog::new().set_title(tl!("Pin a folder to Home").to_string());
             self.ask_one(crate::pickers::Ask::Folder(dialog), None, |app, dir| {
                 app.pin_folder(&dir.to_string_lossy());
             });
@@ -214,6 +214,21 @@ impl PdfCraftApp {
         self.pinned.stale = true;
         self.notify_fmt("Pinned {folder} to Home", &[("folder", &name)]);
         true
+    }
+
+    /// Make `dir` the folder the in-app picker lists and keep it pinned to Home, first (iPadOS:
+    /// the app's Documents folder). Pins whose folders no longer exist are dropped quietly: the
+    /// system moves an iPad app's container to a new path when the app is updated, and the old
+    /// pins would list nothing.
+    pub fn use_documents_folder(&mut self, dir: &std::path::Path) {
+        self.documents_dir = Some(dir.to_path_buf());
+        self.pinned.folders.retain(|f| std::path::Path::new(f).is_dir());
+        if let Some(folder) = clean(&dir.to_string_lossy()) {
+            self.pinned.folders.retain(|f| *f != folder);
+            self.pinned.folders.insert(0, folder);
+            self.pinned.folders.truncate(MAX_PINNED);
+        }
+        self.pinned.stale = true;
     }
 
     /// Remove `folder` from Home. Its files are not touched.

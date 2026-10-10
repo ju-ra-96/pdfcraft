@@ -199,7 +199,7 @@ impl CommentTool {
             Self::Highlight | Self::Underline | Self::StrikeOut | Self::Squiggly => {
                 Shape::TextMarkup { kind: self.markup().unwrap_or(Markup::Highlight), quads: Vec::new() }
             }
-            Self::Ink => Shape::Ink { strokes: Vec::new() },
+            Self::Ink => Shape::Ink { strokes: Vec::new(), pressure: Vec::new() },
             Self::Line => Shape::Line { from: [0.0; 2], to: [0.0; 2], start: LineEnding::None, end: LineEnding::None },
             Self::Arrow => Shape::Line { from: [0.0; 2], to: [0.0; 2], start: LineEnding::None, end: LineEnding::OpenArrow },
             Self::Rectangle => Shape::Rectangle { rect: [0.0; 4] },
@@ -210,7 +210,7 @@ impl CommentTool {
             Self::Callout => Shape::Callout { rect: [0.0; 4], knee: [0.0; 2], point: [0.0; 2], font_size: 10.0, ending: LineEnding::OpenArrow },
             Self::Caret => Shape::Caret { rect: [0.0; 4] },
             Self::ReplaceText => Shape::TextMarkup { kind: Markup::StrikeOut, quads: Vec::new() },
-            Self::Eraser => Shape::Ink { strokes: Vec::new() },
+            Self::Eraser => Shape::Ink { strokes: Vec::new(), pressure: Vec::new() },
             Self::Attach => Shape::Attachment { at: [0.0; 2], icon: pdfcraft_engine::AttachIcon::PushPin, file: String::new(), data: Vec::new() },
         }
     }
@@ -376,6 +376,9 @@ pub struct CommentView {
     /// The selected comment: (page, index in `/Annots`).
     pub selected: Option<(usize, usize)>,
     pub gesture: Option<Gesture>,
+    /// The Pencil's pressure at each point of the Ink stroke being drawn; empty when drawn
+    /// with a mouse or a finger (a stroke of even width).
+    pub pressure: Vec<f32>,
     /// Escape ends egui's drag too; ignore its synthetic release until the mouse is up.
     cancelled_drag: bool,
     pub composer: Option<Composer>,
@@ -435,6 +438,8 @@ pub(crate) struct PageCx<'a> {
     pub allowed: bool,
     /// Comments are hidden (Hide all comments): nothing to select.
     pub hidden: bool,
+    /// The Apple Pencil's pressure, 0–1, while it draws (tablet mode); `None` for a mouse.
+    pub pressure: Option<f32>,
 }
 
 impl PageCx<'_> {
@@ -604,6 +609,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 && let Some(o) = origin
             {
                 cv.gesture = Some(Gesture::Draw { page: cx.page, tool, points: vec![cx.to_user(o)] });
+                cv.pressure = cx.pressure.into_iter().collect();
                 cv.selected = None;
             }
             if let Some(Gesture::Draw { page, tool, points }) = cv.gesture.as_mut()
@@ -616,6 +622,13 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                     let last = points.last().map(|l| cx.to_screen(*l)).unwrap_or(p);
                     if last.distance(p) >= 1.5 {
                         points.push(u);
+                        // One pressure per point, or none at all. The Pencil lifting ends its
+                        // pressure in the frame that adds the last point: that point keeps the
+                        // one before it.
+                        match cx.pressure.or_else(|| cv.pressure.last().copied()) {
+                            Some(f) if cv.pressure.len() + 1 == points.len() => cv.pressure.push(f),
+                            _ => cv.pressure.clear(),
+                        }
                     }
                 } else {
                     points.truncate(1);
@@ -627,9 +640,10 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 && page == cx.page
             {
                 cv.gesture = None;
+                let pressure = std::mem::take(&mut cv.pressure);
                 if tool == CommentTool::Eraser {
                     view.pending_edit = erase(cx, &points);
-                } else if let Some(shape) = drawn_shape(tool, &points) {
+                } else if let Some(shape) = drawn_shape(tool, &points, &pressure) {
                     view.pending_edit = Some(new_comment(cx, tool, shape, String::new()));
                 }
             }
@@ -656,7 +670,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                         if closes {
                             let pts = std::mem::take(points);
                             cv.gesture = None;
-                            if let Some(shape) = drawn_shape(tool, &pts) {
+                            if let Some(shape) = drawn_shape(tool, &pts, &[]) {
                                 view.pending_edit = Some(new_comment(cx, tool, shape, String::new()));
                             }
                             return true;
@@ -677,7 +691,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 && t == tool
             {
                 cv.gesture = None;
-                if let Some(shape) = drawn_shape(tool, &points) {
+                if let Some(shape) = drawn_shape(tool, &points, &[]) {
                     view.pending_edit = Some(new_comment(cx, tool, shape, String::new()));
                 }
             }
@@ -961,6 +975,14 @@ fn paint_gesture(painter: &egui::Painter, cx: &PageCx<'_>, view: &DocView) {
         let stroke = Stroke::new((style.width as f32 * zoom).max(1.0), color32(style.color));
         let pts: Vec<Pos2> = points.iter().map(|p| cx.to_screen(*p)).collect();
         match tool {
+            CommentTool::Ink if view.comments.pressure.len() == pts.len() && pts.len() >= 2 => {
+                // Pencil strokes thicken and thin with pressure, as they will be saved.
+                for (w, p) in pts.windows(2).zip(view.comments.pressure.windows(2)) {
+                    let factor = pdfcraft_engine::pressure_width_factor((p[0] + p[1]) / 2.0) as f32;
+                    painter.line_segment([w[0], w[1]], Stroke::new((style.width as f32 * zoom * factor).max(1.0), stroke.color));
+                    painter.circle_filled(w[1], (style.width as f32 * zoom * factor / 2.0).max(0.5), stroke.color);
+                }
+            }
             CommentTool::Ink => {
                 painter.add(egui::Shape::line(pts, stroke));
             }
@@ -1006,13 +1028,16 @@ fn paint_gesture(painter: &egui::Painter, cx: &PageCx<'_>, view: &DocView) {
 }
 
 /// The shape a finished drawing gesture makes (`None` if it is too small to mean anything).
-fn drawn_shape(tool: CommentTool, points: &[[f64; 2]]) -> Option<Shape> {
+fn drawn_shape(tool: CommentTool, points: &[[f64; 2]], pressure: &[f32]) -> Option<Shape> {
     let (first, last) = (*points.first()?, *points.last()?);
     let far = (first[0] - last[0]).hypot(first[1] - last[1]) >= 2.0;
     let rect = [first[0].min(last[0]), first[1].min(last[1]), first[0].max(last[0]), first[1].max(last[1])];
     let big = rect[2] - rect[0] >= 2.0 && rect[3] - rect[1] >= 2.0;
     match tool {
-        CommentTool::Ink if points.len() >= 2 => Some(Shape::Ink { strokes: vec![points.to_vec()] }),
+        CommentTool::Ink if points.len() >= 2 => Some(Shape::Ink {
+            strokes: vec![points.to_vec()],
+            pressure: if pressure.len() == points.len() { vec![pressure.to_vec()] } else { Vec::new() },
+        }),
         CommentTool::Line | CommentTool::Arrow if far => Some(Shape::Line {
             from: first,
             to: last,
@@ -1066,7 +1091,7 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         // Scrolled away: keep the draft until the page is back.
         return None;
     };
-    let cx = PageCx { page, xf: &xf, info, tool: QuickTool::Select, prefs, allowed: true, hidden: false };
+    let cx = PageCx { page, xf: &xf, info, tool: QuickTool::Select, prefs, allowed: true, hidden: false, pressure: None };
     let anchor = cx.to_screen(c.at);
     let t = Tokens::get(ctx);
     let mut post = false;
@@ -1419,11 +1444,11 @@ mod tests {
 
     #[test]
     fn drawn_shapes_ignore_slips() {
-        assert_eq!(drawn_shape(CommentTool::Rectangle, &[[0.0, 0.0], [1.0, 1.0]]), None);
-        assert_eq!(drawn_shape(CommentTool::Rectangle, &[[10.0, 0.0], [0.0, 10.0]]), Some(Shape::Rectangle { rect: [0.0, 0.0, 10.0, 10.0] }));
-        assert_eq!(drawn_shape(CommentTool::Ink, &[[0.0, 0.0]]), None);
+        assert_eq!(drawn_shape(CommentTool::Rectangle, &[[0.0, 0.0], [1.0, 1.0]], &[]), None);
+        assert_eq!(drawn_shape(CommentTool::Rectangle, &[[10.0, 0.0], [0.0, 10.0]], &[]), Some(Shape::Rectangle { rect: [0.0, 0.0, 10.0, 10.0] }));
+        assert_eq!(drawn_shape(CommentTool::Ink, &[[0.0, 0.0]], &[]), None);
         assert!(matches!(
-            drawn_shape(CommentTool::Arrow, &[[0.0, 0.0], [5.0, 0.0]]),
+            drawn_shape(CommentTool::Arrow, &[[0.0, 0.0], [5.0, 0.0]], &[]),
             Some(Shape::Line { start: LineEnding::None, end: LineEnding::OpenArrow, .. })
         ));
     }

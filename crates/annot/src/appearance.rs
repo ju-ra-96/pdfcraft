@@ -115,6 +115,158 @@ pub(crate) fn smooth_segments(pts: &[(f64, f64)]) -> Vec<[(f64, f64); 3]> {
         .collect()
 }
 
+/// The strokes of an Ink annotation's `/InkList` (direct values only); `None` when it has none or
+/// a stroke isn't a list of finite numbers.
+pub(crate) fn ink_strokes(d: &Dict) -> Option<Vec<Vec<[f64; 2]>>> {
+    d.get(b"InkList")?
+        .as_array()?
+        .iter()
+        .map(|s| {
+            let v: Vec<f64> = s.as_array()?.iter().map(|o| o.as_f64().filter(|x| x.is_finite())).collect::<Option<_>>()?;
+            Some(v.as_chunks::<2>().0.iter().map(|p| [p[0], p[1]]).collect())
+        })
+        .collect()
+}
+
+/// One closed outline around a stroke whose half-width at point `i` is `radii[i]`, with round
+/// ends, for a nonzero fill: down one side, round the end, back along the other side, round the
+/// start. A single point is a dot. Points closer than a hundredth of a point to the previous one
+/// are skipped (no direction to offset from).
+pub(crate) fn pressure_outline(pts: &[[f64; 2]], radii: &[f64]) -> String {
+    let (pts, radii) = smooth_with_radii(pts, radii);
+    let mut p: Vec<((f64, f64), f64)> = Vec::with_capacity(pts.len());
+    for (pt, r) in pts.iter().zip(&radii) {
+        let q = (pt[0], pt[1]);
+        if p.last().is_none_or(|(l, _): &((f64, f64), f64)| (q.0 - l.0).hypot(q.1 - l.1) > 0.01) {
+            p.push((q, r.max(0.05)));
+        }
+    }
+    let mut c = String::new();
+    let (Some(&(first, r0)), Some(&(last, r1))) = (p.first(), p.last()) else { return c };
+    if p.len() == 1 {
+        c.push_str(&format!(
+            "{} {} m
+",
+            n(first.0 + r0),
+            n(first.1)
+        ));
+        arc(&mut c, first, r0, 0.0, std::f64::consts::TAU);
+        c.push_str(
+            "h
+",
+        );
+        return c;
+    }
+    // Unit normal (left of travel) at each point, from the chord between its neighbours.
+    let normals: Vec<(f64, f64)> = (0..p.len())
+        .map(|i| {
+            let a = p[i.saturating_sub(1)].0;
+            let b = p[(i + 1).min(p.len() - 1)].0;
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let len = dx.hypot(dy);
+            if len > 1e-9 { (-dy / len, dx / len) } else { (0.0, 1.0) }
+        })
+        .collect();
+    let side = |i: usize, s: f64| {
+        let ((x, y), r) = p[i];
+        let (nx, ny) = normals[i];
+        (x + s * nx * r, y + s * ny * r)
+    };
+    let start = side(0, 1.0);
+    c.push_str(&format!(
+        "{} {} m
+",
+        n(start.0),
+        n(start.1)
+    ));
+    for i in 1..p.len() {
+        let q = side(i, 1.0);
+        c.push_str(&format!(
+            "{} {} l
+",
+            n(q.0),
+            n(q.1)
+        ));
+    }
+    let end_n = normals[p.len() - 1];
+    arc(&mut c, last, r1, end_n.1.atan2(end_n.0), -std::f64::consts::PI);
+    for i in (0..p.len()).rev() {
+        let q = side(i, -1.0);
+        c.push_str(&format!(
+            "{} {} l
+",
+            n(q.0),
+            n(q.1)
+        ));
+    }
+    let start_n = normals[0];
+    arc(&mut c, first, r0, (-start_n.1).atan2(-start_n.0), -std::f64::consts::PI);
+    c.push_str(
+        "h
+",
+    );
+    c
+}
+
+/// Points subdivided along the same Catmull-Rom curve plain Ink strokes are drawn with
+/// ([`smooth_segments`]), with the radius interpolated between them, so a stroke sampled once a
+/// frame (60 times a second on most iPads) reads as a curve, not a polygon. Long strokes are
+/// subdivided less, keeping the outline under [`MAX_OUTLINE_POINTS`].
+fn smooth_with_radii(pts: &[[f64; 2]], radii: &[f64]) -> (Vec<[f64; 2]>, Vec<f64>) {
+    let n = pts.len().min(radii.len());
+    let steps = if n < 3 { 1 } else { (MAX_OUTLINE_POINTS / n).clamp(1, 4) };
+    if steps == 1 {
+        return (pts[..n].to_vec(), radii[..n].to_vec());
+    }
+    // Every index below is under `n`, which no slice is shorter than.
+    let at = |i: usize| pts[i.min(n - 1)];
+    let (mut out, mut out_r) = (Vec::with_capacity(n * steps), Vec::with_capacity(n * steps));
+    for i in 0..n - 1 {
+        let (p0, p1, p2, p3) = (at(i.saturating_sub(1)), at(i), at(i + 1), at(i + 2));
+        for k in 0..steps {
+            let t = k as f64 / steps as f64;
+            let (t2, t3) = (t * t, t * t * t);
+            let c = |a: f64, b: f64, c: f64, d: f64| {
+                0.5 * (2.0 * b + (c - a) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2 + (3.0 * b - a - 3.0 * c + d) * t3)
+            };
+            out.push([c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1])]);
+            out_r.push(radii[i] + (radii[i + 1] - radii[i]) * t);
+        }
+    }
+    out.push(pts[n - 1]);
+    out_r.push(radii[n - 1]);
+    (out, out_r)
+}
+
+/// The most points a pressure outline is built from (each becomes two path points).
+const MAX_OUTLINE_POINTS: usize = 20_000;
+
+/// Append Bézier `c` operators for an arc of radius `r` around `center`, from angle `from`
+/// sweeping `sweep` radians (negative: clockwise); the path is already at the arc's start.
+fn arc(c: &mut String, center: (f64, f64), r: f64, from: f64, sweep: f64) {
+    let parts = (sweep.abs() / std::f64::consts::FRAC_PI_2).ceil().clamp(1.0, 8.0) as usize;
+    let step = sweep / parts as f64;
+    let k = 4.0 / 3.0 * (step / 4.0).tan();
+    for i in 0..parts {
+        let (a0, a1) = (from + step * i as f64, from + step * (i + 1) as f64);
+        let (p0, p3) = ((a0.cos(), a0.sin()), (a1.cos(), a1.sin()));
+        let p1 = (p0.0 - k * p0.1, p0.1 + k * p0.0);
+        let p2 = (p3.0 + k * p3.1, p3.1 - k * p3.0);
+        let at = |v: (f64, f64)| (center.0 + r * v.0, center.1 + r * v.1);
+        let (p1, p2, p3) = (at(p1), at(p2), at(p3));
+        c.push_str(&format!(
+            "{} {} {} {} {} {} c
+",
+            n(p1.0),
+            n(p1.1),
+            n(p2.0),
+            n(p2.1),
+            n(p3.0),
+            n(p3.1)
+        ));
+    }
+}
+
 /// `c` operators for [`smooth_segments`] (the path already starts at the first point).
 fn smooth_curve(pts: &[(f64, f64)]) -> String {
     smooth_segments(pts).iter().map(|[a, b, e]| format!("{} {} {} {} {} {} c\n", n(a.0), n(a.1), n(b.0), n(b.1), n(e.0), n(e.1))).collect()
@@ -498,6 +650,18 @@ pub fn build(d: &Dict) -> Option<Stream> {
         }
         b"Ink" => {
             let col = stroke?;
+            // Pencil strokes: filled outlines whose width follows the pressure.
+            if let Some(strokes) = ink_strokes(d)
+                && let Some(pressure) = crate::ink_pressure(d, &strokes)
+            {
+                c.push_str(&rg(col));
+                for (s, p) in strokes.iter().zip(&pressure) {
+                    let radii: Vec<f64> = p.iter().map(|x| w / 2.0 * crate::pressure_width_factor(*x as f32)).collect();
+                    c.push_str(&pressure_outline(s, &radii));
+                }
+                c.push_str("f\n");
+                return Some(form(rect, c.as_bytes(), res));
+            }
             let list = d.get(b"InkList")?.as_array()?;
             c.push_str(&format!("{}{} w 1 J 1 j\n", rg_stroke(col), n(w)));
             for s in list {

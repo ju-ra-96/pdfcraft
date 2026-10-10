@@ -2103,3 +2103,9 @@ action wizard	Start	Старт
 	The field {name} no longer exists.	Полето {name} вече не съществува.
 	A selected field has no widget on any page, so the fields can't be edited together.	Едно от избраните полета няма елемент на нито една страница, затова полетата не могат да се редактират заедно.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} с {dpi} dpi, най-голямата резолюция, с която могат да бъдат изобразени)
+# PdfCraft for iPad: the in-app document picker.
+	Documents	Документи
+	Choose this folder	Избор на тази папка
+	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Тук още няма нищо. Поставете файлове във „Файлове“ › „На моя iPad“ › PdfCraft.
+	“{name}” already exists. Save again to replace it.	„{name}“ вече съществува. Запазете отново, за да го замените.
+	Only the Apple Pencil draws; fingers scroll and zoom	Само Apple Pencil рисува; пръстите превъртат и мащабират

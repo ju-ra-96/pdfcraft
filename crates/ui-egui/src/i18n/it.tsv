@@ -2150,3 +2150,9 @@ signature pad	Type	Digita
 	The field {name} no longer exists.	Il campo {name} non esiste più.
 	A selected field has no widget on any page, so the fields can't be edited together.	Un campo selezionato non ha widget in nessuna pagina, quindi i campi non possono essere modificati insieme.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} a {dpi} dpi, la dimensione massima a cui si possono disegnare)
+# PdfCraft for iPad: the in-app document picker.
+	Documents	Documenti
+	Choose this folder	Scegli questa cartella
+	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Ancora niente qui. Metti dei file in File › Su iPad › PdfCraft.
+	“{name}” already exists. Save again to replace it.	“{name}” esiste già. Salva di nuovo per sostituirlo.
+	Only the Apple Pencil draws; fingers scroll and zoom	Solo l’Apple Pencil disegna; le dita scorrono e ingrandiscono

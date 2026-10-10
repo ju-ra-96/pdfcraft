@@ -259,7 +259,7 @@ Press <kbd>⌘K</kbd> to search every tool and command, or browse the **All tool
 
 ## Runs everywhere, stays yours
 
-- **Native on macOS, Windows, Linux and FreeBSD**, and **in the browser** through WebAssembly, from the same Rust codebase. Windows builds come for x64, x86 and ARM64 (Windows on ARM, no emulation); every ARM64 change is tested on ARM64 hardware in CI.
+- **Native on macOS, Windows, Linux and FreeBSD**, **on iPad** with Apple Pencil (pressure-sensitive drawing, palm rejection, finger scrolling and pinch zoom; see [docs/ipad.md](docs/ipad.md)), and **in the browser** through WebAssembly, from the same Rust codebase. Windows builds come for x64, x86 and ARM64 (Windows on ARM, no emulation); every ARM64 change is tested on ARM64 hardware in CI.
 - **Private by design.** Documents never leave your machine. There's no account, no telemetry and no cloud processing.
 - **Engine first.** Parsing, rendering and editing live in reusable library crates. The interface is one swappable layer on top.
 - **Scriptable.** The `pdfcraft-cli` tool (see [Built for agents, too](#built-for-agents-too)) covers inspecting, rendering, extracting text, editing, combining, extracting pages and splitting. Robustness sweeps run on the same engine as the app.
@@ -334,7 +334,7 @@ PdfCraft is a Cargo workspace of focused crates, layered so the core never depen
 | `pdfcraft-render` | Rendering, inspection and text extraction with reading order |
 | `pdfcraft-engine` | The façade every frontend uses: sessions, edits, undo, saving, the tool catalogue |
 | `pdfcraft-automation` | Agent control: the headless tool table, `pdfcraft-cli run`, and the opt-in MCP server |
-| `pdfcraft-ui-egui` | The desktop and web interface |
+| `pdfcraft-ui-egui` | The desktop, iPad and web interface |
 
 **Quality gates.** Every change passes the same automated checks:
 - formatting, and Clippy with warnings as errors;
@@ -462,6 +462,10 @@ Every Linux build needs glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 3
 | Build | File |
 |---|---|
 | x86_64 | `pdfcraft-<ver>-freebsd-x86_64.tar.gz` |
+
+### iPad
+
+No download yet: build it from source with `packaging/ios/package.sh` (simulator, or `--device` with your own signing identity). See [docs/ipad.md](docs/ipad.md).
 
 ### Web (WebAssembly)
 

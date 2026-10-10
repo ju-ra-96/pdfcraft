@@ -308,7 +308,30 @@ impl Automation {
                                 .collect::<Result<Vec<_>>>()
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    Shape::Ink { strokes }
+                    let pressure = match a.get("pressure") {
+                        None => Vec::new(),
+                        Some(p) => {
+                            let wrong =
+                                || ToolError::InvalidArgs("pressure must be an array of arrays of numbers from 0 to 1, one per stroke point".into());
+                            let pressure = p
+                                .as_array()
+                                .ok_or_else(wrong)?
+                                .iter()
+                                .map(|s| {
+                                    s.as_array()
+                                        .ok_or_else(wrong)?
+                                        .iter()
+                                        .map(|v| v.as_f64().filter(|v| (0.0..=1.0).contains(v)).map(|v| v as f32).ok_or_else(wrong))
+                                        .collect::<Result<Vec<_>>>()
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+                            if pressure.len() != strokes.len() || pressure.iter().zip(&strokes).any(|(p, s)| p.len() != s.len()) {
+                                return Err(ToolError::InvalidArgs("pressure needs one value per point of each stroke".into()));
+                            }
+                            pressure
+                        }
+                    };
+                    Shape::Ink { strokes, pressure }
                 }
                 "polygon" | "cloud" | "polyline" => {
                     let wrong = || ToolError::InvalidArgs(format!("{kind} needs `points`: an array of [x, y] points"));

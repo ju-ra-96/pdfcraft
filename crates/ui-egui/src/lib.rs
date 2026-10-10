@@ -63,6 +63,7 @@ pub use sign_ui::{DigitalIdEntry, SignDraft, SignStep};
 mod autoscroll;
 mod bidi;
 pub mod bulk_fields;
+mod dialog;
 mod dialogs;
 mod edit_text_ui;
 mod editing;
@@ -73,6 +74,8 @@ pub mod forms_ui;
 mod home;
 mod icon_data;
 pub mod icons;
+#[cfg(not(target_arch = "wasm32"))]
+mod in_app_picker;
 pub mod last_session;
 mod pageboxes;
 mod palette;
@@ -109,6 +112,7 @@ mod recovery;
 #[cfg(not(target_arch = "wasm32"))]
 mod system_fonts;
 pub mod theme;
+pub mod touch;
 pub mod updates;
 mod wheel_pager;
 mod widgets;
@@ -442,6 +446,18 @@ pub struct PdfCraftApp {
     /// Pick these files instead of showing a picker (tests and automation).
     #[cfg(not(target_arch = "wasm32"))]
     pub pick_override: Option<Vec<String>>,
+    /// The in-app picker on screen (iPadOS, see `in_app_picker`).
+    #[cfg(not(target_arch = "wasm32"))]
+    in_app_pick: Option<pickers::InAppPending>,
+    /// The folder the in-app picker lists (iPadOS: the app's Documents folder).
+    pub documents_dir: Option<std::path::PathBuf>,
+    /// Touch and Apple Pencil input; `Some` in tablet mode ([`Self::enable_tablet`]).
+    pub touch: Option<touch::TouchRouter>,
+    /// Preferences ▸ Apple Pencil ▸ Only the Pencil draws. `None` decides automatically: on
+    /// once a Pencil has been used.
+    pub pencil_only: Option<bool>,
+    /// Where the page area was last frame: fingers landing there scroll and zoom (tablet mode).
+    touch_page: Option<egui::Rect>,
     /// Write exported files (split) here instead of asking (tests and automation).
     pub export_dir_override: Option<String>,
     /// Split dialog settings.
@@ -699,6 +715,12 @@ impl PdfCraftApp {
             pickers: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             pick_override: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            in_app_pick: None,
+            documents_dir: None,
+            touch: None,
+            pencil_only: None,
+            touch_page: None,
             export_dir_override: None,
             split_draft: SplitDraft::default(),
             extract_draft: ExtractDraft::default(),
@@ -1026,7 +1048,7 @@ impl PdfCraftApp {
             }
             (Ok(bytes), false) => {
                 #[cfg(not(target_arch = "wasm32"))]
-                self.ask_one(pickers::Ask::Save(rfd::AsyncFileDialog::new().set_file_name(&att.name)), None, move |app, path| {
+                self.ask_one(pickers::Ask::Save(crate::dialog::AsyncFileDialog::new().set_file_name(&att.name)), None, move |app, path| {
                     match crate::editing::write_atomically(&path.to_string_lossy(), &bytes) {
                         Ok(()) => app.notify_fmt("Saved {name}", &[("name", &path.display().to_string())]),
                         Err(e) => app.notify_fmt("Couldn't save: {e}", &[("e", &e.to_string())]),
@@ -1090,7 +1112,9 @@ impl PdfCraftApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.pick(
             pickers::PickFor::Open,
-            rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE),
+            crate::dialog::AsyncFileDialog::new()
+                .add_filter("PDF", &["pdf"])
+                .add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE),
             false,
         );
         // Browsers pick files asynchronously; the bytes arrive through `inbox`.
@@ -1099,7 +1123,7 @@ impl PdfCraftApp {
             let inbox = self.inbox.clone();
             let ctx = self.ctx.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                if let Some(h) = rfd::AsyncFileDialog::new()
+                if let Some(h) = crate::dialog::AsyncFileDialog::new()
                     .add_filter("PDF", &["pdf"])
                     .add_filter(tl!("Images and text"), &create_ui::CONVERTIBLE)
                     .pick_file()
@@ -1324,6 +1348,8 @@ impl PdfCraftApp {
             "actions": actions_ui::encode(&self.custom_actions),
             "combine_columns": self.combine_columns.to_json(),
             "comments_panel_closed": self.comments_panel_closed,
+            "pencil_only": self.pencil_only,
+            "pencil_seen": self.touch.as_ref().map(|t| t.pencil_seen),
         })
         .to_string()
     }
@@ -1357,6 +1383,10 @@ impl PdfCraftApp {
         }
         if let Some(closed) = v["comments_panel_closed"].as_bool() {
             self.comments_panel_closed = closed;
+        }
+        self.pencil_only = v["pencil_only"].as_bool();
+        if let (Some(touch), Some(seen)) = (self.touch.as_mut(), v["pencil_seen"].as_bool()) {
+            touch.pencil_seen = seen;
         }
         if let Some(defaults) = v["default_zoom"].as_str().and_then(|zoom| self.view_defaults.with_zoom(zoom)) {
             self.view_defaults = defaults;
@@ -1452,6 +1482,14 @@ impl PdfCraftApp {
                     format!("language must be one of {}", codes.join(", "))
                 })?;
                 self.language = language.to_string();
+            }
+            ("pencil_only", _) => {
+                self.pencil_only = match value {
+                    "auto" => None,
+                    "on" | "true" => Some(true),
+                    "off" | "false" => Some(false),
+                    _ => return Err("pencil_only must be auto, on or off".into()),
+                };
             }
             ("theme", _) => {
                 let preference = match value {
@@ -1756,6 +1794,7 @@ impl eframe::App for PdfCraftApp {
     /// would keep the place the pointer entered at: tell it where the pointer really is, so the
     /// page grid can show (and use) the gap under it.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.route_touches(ctx, raw);
         if raw.hovered_files.is_empty() && raw.dropped_files.is_empty() {
             return;
         }
@@ -1792,6 +1831,9 @@ impl eframe::App for PdfCraftApp {
             }
         }
         self.sync_theme(ctx);
+        if self.touch.is_some() {
+            touch::ensure_tablet_style(ctx);
+        }
         // Remember user work even if its tab is subsequently closed or Home is selected.
         self.startup_superseded |= !self.views.is_empty() || self.combine_showing() || self.dialog.is_some() || self.password_prompt.is_some();
         // Before taking this frame's drop: the grid must be drawn once with the pointer where
@@ -1904,6 +1946,8 @@ impl eframe::App for PdfCraftApp {
         for view in &mut self.views {
             view.begin_render_frame();
         }
+        // Set again by the page view, if one shows this frame.
+        self.touch_page = None;
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
             .active
@@ -1927,6 +1971,8 @@ impl eframe::App for PdfCraftApp {
                 },
             );
             dialogs::show(self, &ctx);
+            #[cfg(not(target_arch = "wasm32"))]
+            self.show_in_app_picker(&ctx);
             // Notices too: a refused field value or a failed save must be seen in full screen.
             self.show_progress(&ctx);
             widgets::toast(self, &ctx);
@@ -1953,6 +1999,8 @@ impl eframe::App for PdfCraftApp {
         self.process_pending_edits();
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
+        #[cfg(not(target_arch = "wasm32"))]
+        self.show_in_app_picker(&ctx);
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
         self.finish_render_frame(&ctx);

@@ -96,8 +96,11 @@ static STDERR_LOGGER: StderrLogger = StderrLogger;
 #[cfg(target_os = "ios")]
 impl log::Log for StderrLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        // wgpu and naga are very chatty at info level.
-        metadata.level() <= log::Level::Warn || metadata.target().starts_with("pdfcraft")
+        // wgpu and naga are chatty: at every start in the Simulator they warn that its Metal
+        // device lacks WebGPU features PdfCraft doesn't use. Their errors still show.
+        let quiet = metadata.target().starts_with("wgpu") || metadata.target().starts_with("naga");
+        let level = if quiet { log::Level::Error } else { log::Level::Warn };
+        metadata.level() <= level || metadata.target().starts_with("pdfcraft")
     }
 
     fn log(&self, record: &log::Record) {

@@ -9,7 +9,7 @@
 #   --device       build for iPad hardware (aarch64-apple-ios) instead of the simulator
 #   --debug        debug profile (default: release)
 #   --skip-build   reuse the last cargo build
-#   --run [NAME]   simulator only: boot NAME (default "iPad Pro 13-inch (M5)", or the first iPad
+#   --run [NAME]   simulator only: boot NAME (default "iPad Air 11-inch (M4)", or the first iPad
 #                  available), install the app and launch it, streaming its log to this terminal
 #
 # Device signing (env; needed with --device):
@@ -133,11 +133,19 @@ if [ "$RUN" = 1 ]; then
   pick() { grep -F "    $1 (" <<<"$devices" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/'; }
   UDID=""
   [ -n "$SIM_NAME" ] && UDID="$(pick "$SIM_NAME")"
-  [ -z "$UDID" ] && [ -z "$SIM_NAME" ] && UDID="$(pick "iPad Pro 13-inch (M5)")"
+  [ -z "$UDID" ] && [ -z "$SIM_NAME" ] && UDID="$(pick "iPad Air 11-inch (M4)")"
   [ -z "$UDID" ] && [ -z "$SIM_NAME" ] && UDID="$(grep -E '^    iPad' <<<"$devices" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
   [ -n "$UDID" ] || { echo "error: no available iPad simulator${SIM_NAME:+ named \"$SIM_NAME\"}" >&2; exit 1; }
   "$SIMCTL" boot "$UDID" 2>/dev/null || true
-  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  # Show the device. By path: the viewer lives inside Xcode, where `open -a` may not find it.
+  # Xcode 27 shows simulators in DeviceHub; earlier versions have Simulator.app.
+  if [ -d "$XCODE/Applications/Simulator.app" ]; then
+    open "$XCODE/Applications/Simulator.app" --args -CurrentDeviceUDID "$UDID" || warn "could not open Simulator"
+  elif [ -d "$XCODE/../Applications/DeviceHub.app" ]; then
+    open "$XCODE/../Applications/DeviceHub.app" || warn "could not open DeviceHub"
+  else
+    warn "no Simulator or DeviceHub app in Xcode: the app runs, but no window shows it"
+  fi
   "$SIMCTL" bootstatus "$UDID" -b >/dev/null
   "$SIMCTL" install "$UDID" "$APP"
   echo "==> launching $BUNDLE_ID on $UDID (Ctrl-C stops streaming, the app keeps running)"

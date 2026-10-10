@@ -60,7 +60,7 @@ You need macOS with Xcode installed, and the Rust targets (`package.sh` adds the
 
 ```sh
 # Simulator: build, bundle, boot an iPad simulator, install and launch, with its log here.
-packaging/ios/package.sh --run                        # release build, iPad Pro 13-inch (M5)
+packaging/ios/package.sh --run                        # release build, iPad Air 11-inch (M4)
 packaging/ios/package.sh --debug --run "iPad Air 13-inch (M4)"
 ```
 

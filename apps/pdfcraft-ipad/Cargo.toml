@@ -1,0 +1,27 @@
+[package]
+name = "pdfcraft-ipad"
+description = "The PdfCraft engine for the native iPad app: a C interface over the automation tool table (the SwiftUI app is in PdfCraft.xcodeproj)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "pdfcraft_ipad"
+# staticlib: linked into the iPad app by Xcode. rlib: for the tests and the workspace build.
+crate-type = ["staticlib", "rlib"]
+
+# Not `lints.workspace`: the C boundary needs `unsafe` (raw pointers in, an exported symbol out).
+# The workspace forbids it; here it is denied, and allowed only on the four exported functions,
+# each with its safety contract (the owner's exception for the iPad app, AGENTS.md §4).
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[dependencies]
+pdfcraft-automation = { workspace = true }
+serde_json = { workspace = true }
+base64 = "0.22"

@@ -87,7 +87,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("pdfcraft", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
-    ("ios", Class::Exempt),
+    ("ipad", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
 
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn apps_exempt() {
-        for app in ["pdfcraft", "pdfcraft-cli", "pdfcraft-web", "pdfcraft-ios", "xtask"] {
+        for app in ["pdfcraft", "pdfcraft-cli", "pdfcraft-web", "pdfcraft-ipad", "xtask"] {
             assert!(check(&[c(app, &[("egui", Normal, false), ("pdfcraft-ui-egui", Normal, true)])]).is_empty());
         }
     }

@@ -2139,9 +2139,3 @@ action wizard	Start	Indítás
 	The field {name} no longer exists.	A(z) {name} mező már nem létezik.
 	A selected field has no widget on any page, so the fields can't be edited together.	Az egyik kijelölt mezőnek egyik oldalon sincs widgetje, ezért a mezők nem szerkeszthetők együtt.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} {dpi} dpi felbontással, a legnagyobb méretben, amelyben megjeleníthetők)
-# PdfCraft for iPad: the in-app document picker.
-	Documents	Dokumentumok
-	Choose this folder	Ennek a mappának a kiválasztása
-	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Itt még nincs semmi. Tegyél fájlokat ide: Fájlok › Saját iPaden › PdfCraft.
-	“{name}” already exists. Save again to replace it.	„{name}” már létezik. Mentsd újra a cseréjéhez.
-	Only the Apple Pencil draws; fingers scroll and zoom	Csak az Apple Pencil rajzol; az ujjak görgetnek és nagyítanak

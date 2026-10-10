@@ -3753,13 +3753,12 @@ name = "pdfcraft-geom"
 version = "0.5.0"
 
 [[package]]
-name = "pdfcraft-ios"
+name = "pdfcraft-ipad"
 version = "0.5.0"
 dependencies = [
- "eframe",
- "egui",
- "log",
- "pdfcraft-ui-egui",
+ "base64 0.22.1",
+ "pdfcraft-automation",
+ "serde_json",
 ]
 
 [[package]]

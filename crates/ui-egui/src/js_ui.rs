@@ -252,16 +252,6 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             crate::i18n::set_current(crate::i18n::Lang::from_pref(&app.language));
         }
     });
-    // Tablet mode (iPad): whether fingers draw too (`touch`).
-    if app.touch.is_some() {
-        ui.add_space(8.0);
-        // A product name, the same in every language.
-        ui.label(egui::RichText::new("Apple Pencil").font(theme::semibold(13.0)));
-        let mut only = app.pencil_only_draws();
-        if ui.checkbox(&mut only, tl!("Only the Apple Pencil draws; fingers scroll and zoom")).changed() {
-            app.pencil_only = Some(only);
-        }
-    }
     ui.add_space(8.0);
     ui.label(egui::RichText::new(tl!("Documents and view")).font(theme::semibold(13.0)));
     ui.horizontal(|ui| {

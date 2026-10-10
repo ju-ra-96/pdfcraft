@@ -2141,9 +2141,3 @@ action wizard	Start	Starten
 	The field {name} no longer exists.	Das Feld {name} existiert nicht mehr.
 	A selected field has no widget on any page, so the fields can't be edited together.	Ein ausgewähltes Feld hat auf keiner Seite ein Widget, daher können die Felder nicht gemeinsam bearbeitet werden.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} mit {dpi} dpi, der größten Auflösung, in der sie gezeichnet werden können)
-# PdfCraft for iPad: the in-app document picker.
-	Documents	Dokumente
-	Choose this folder	Diesen Ordner wählen
-	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Noch nichts hier. Lege Dateien in Dateien › Auf meinem iPad › PdfCraft ab.
-	“{name}” already exists. Save again to replace it.	„{name}“ ist bereits vorhanden. Speichere erneut, um die Datei zu ersetzen.
-	Only the Apple Pencil draws; fingers scroll and zoom	Nur der Apple Pencil zeichnet; Finger scrollen und zoomen

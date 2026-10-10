@@ -2054,9 +2054,3 @@
 	The field {name} no longer exists.	Поле {name} больше не существует.
 	A selected field has no widget on any page, so the fields can't be edited together.	У одного из выбранных полей нет виджета ни на одной странице, поэтому поля нельзя изменить вместе.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} — с разрешением {dpi} dpi, максимальным, с каким их можно отрисовать)
-# PdfCraft for iPad: the in-app document picker.
-	Documents	Документы
-	Choose this folder	Выбрать эту папку
-	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Здесь пока пусто. Поместите файлы в «Файлы» › «На iPad» › PdfCraft.
-	“{name}” already exists. Save again to replace it.	«{name}» уже существует. Сохраните ещё раз, чтобы заменить его.
-	Only the Apple Pencil draws; fingers scroll and zoom	Рисует только Apple Pencil; пальцы прокручивают и масштабируют

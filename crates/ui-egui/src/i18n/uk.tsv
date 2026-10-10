@@ -2164,9 +2164,3 @@ certificate	Subject	Власник сертифіката
 	The field {name} no longer exists.	Поле {name} більше не існує.
 	A selected field has no widget on any page, so the fields can't be edited together.	Одне з вибраних полів не має віджета на жодній сторінці, тому поля не можна редагувати разом.
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} — з роздільністю {dpi} dpi, найбільшою, з якою їх можна відобразити)
-# PdfCraft for iPad: the in-app document picker.
-	Documents	Документи
-	Choose this folder	Вибрати цю теку
-	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	Тут поки порожньо. Покладіть файли у «Файли» › «На iPad» › PdfCraft.
-	“{name}” already exists. Save again to replace it.	«{name}» уже існує. Збережіть ще раз, щоб замінити його.
-	Only the Apple Pencil draws; fingers scroll and zoom	Малює лише Apple Pencil; пальці прокручують і масштабують

@@ -1,122 +1,83 @@
 # PdfCraft for iPad
 
-PdfCraft runs on iPad as a native app: the same Rust engine and egui interface as the desktop,
-in one full-screen UIKit window (winit's iOS backend), drawn with wgpu on Metal. The crate is
-`apps/pdfcraft-ios`; packaging is `packaging/ios/`.
+PdfCraft for iPad is a native SwiftUI app built on Apple's frameworks, with PdfCraft's Rust engine underneath:
 
-It is developed against iPadOS 26 on the iPad Air (M4) with Apple Pencil Pro, and runs on any
-iPad with iPadOS 15 or later.
-
-## Apple Pencil and touch
-
-On the page:
-
-| Input | Does |
+| Part | What it is |
 |---|---|
-| Apple Pencil | The pointer: draws, highlights, selects text, moves comments, as a mouse does on the desktop |
-| Pencil pressure | With **Draw**, a firmer press draws a wider line. Normal handwriting draws the set width, the lightest touch about a third of it, the firmest about 1.65× |
-| One or two fingers | Scroll. A flick keeps gliding |
-| Pinch | Zoom, around the fingers |
-| Tap | Click: follow a link, fill a field, choose a comment |
-| Long press | Right-click: context menus |
-| Palm or finger while the Pencil draws | Ignored |
+| Documents | Apple's document browser (`DocumentGroup`): Files, iCloud Drive, other providers, recents, tags, one window per document, Stage Manager and Split View |
+| Viewing | PDFKit: continuous pages, pinch zoom, page thumbnails, the system find bar (⌘F), form filling, text selection |
+| Apple Pencil | PencilKit: Apple's tool picker and inks, pressure, tilt and barrel roll, hover preview, double-tap and squeeze (as set in Settings ▸ Apple Pencil), palm rejection, haptics, "Only Draw with Apple Pencil" |
+| Sharing | The system share sheet |
+| Pro tools | PdfCraft's engine (`apps/pdfcraft-ipad/src/lib.rs`): editable pressure-sensitive Ink, redaction, file-size reduction, flattening, and every other tool of `pdfcraft-cli tools` |
 
-On the toolbars, panels, menus and dialogs, a finger is the pointer, so buttons, sliders and
-lists work as you'd expect.
+It is developed against iPadOS 26 on the iPad Air 11-inch (M4) with Apple Pencil Pro. It needs iPadOS 17 or later.
 
-**Preferences ▸ Apple Pencil ▸ Only the Apple Pencil draws; fingers scroll and zoom** is on as
-soon as a Pencil has touched the screen. Before that, or with it turned off, one finger on the page
-draws and selects like the Pencil once it moves, and two fingers scroll and zoom. Notes works the
-same way. Scripts set it with `set_option("pencil_only", "auto" | "on" | "off")`.
+## Using it
 
-Pressure is saved in a standard Ink annotation. Its `/InkList` holds the stroke, which every PDF
-viewer draws, and `/PCPressure` holds one pressure per point, which PdfCraft draws as a filled
-outline whose width follows the pressure. The appearance stream is written into the file, so other
-viewers show the varying width too. The Eraser cuts pressure along with the strokes. Agents add
-the same strokes with `comment_add` (`"type": "ink"`, `"strokes"`, `"pressure"`).
+- **Open** a PDF from the document browser, from Files (Open With ▸ PdfCraft), or with Share ▸ PdfCraft from another app. **Create Document** makes a blank page.
+- **Markup** (the pencil button, ⇧⌘E) shows Apple's tool picker; draw with the Apple Pencil. While Markup is on, fingers still scroll and zoom the pages unless you turn off **Only Draw with Apple Pencil** in Settings ▸ Apple Pencil.
+  - PencilKit's own undo, eraser and lasso work on the strokes.
+  - **Done** saves them into the document as Ink annotations, in one undo step. So does leaving the app.
+- **Select text** (long press, or drag with the Pencil), then use **Highlight**, **Underline**, **Strike Through** or **Redact** from the edit menu or the toolbar.
+- **Page** menu: rotate the current page, insert a blank page after it, delete it.
+- **Tools** menu (PdfCraft's engine):
+  - **Redact Text…**: every match is removed for good, with a black box in its place.
+  - **Protect with a Password…**: Apple's PDF encryption, applied each time the document saves.
+  - **Reduce File Size**
+  - **Flatten Comments and Fields**
+- Every change is undoable (⌘Z, or a three-finger swipe) and saves automatically.
 
-How it works: egui-winit turns the first touch into a mouse, so on its own every finger would draw.
-In tablet mode, `crates/ui-egui/src/touch.rs` rewrites each frame's touches before egui sees them.
-On iPad a Pencil touch is the only kind that reports a force (no iPad has 3D Touch), which is how
-the router tells the Pencil from a finger.
+## How Pencil strokes are kept
 
-## Files
+PencilKit works out each point's width from the Pencil's pressure, tilt, speed and roll. When a stroke is saved, `InkConverter.swift` turns it into a standard Ink annotation:
+- its points go into `/InkList`, which every PDF viewer draws;
+- its widths go into PdfCraft's `/PCPressure`, one value per point.
 
-iPadOS gives the app a sandbox. Its **Documents** folder shows in the Files app as
-**On My iPad ▸ PdfCraft**. Drag PDFs there in Files, or from a Mac in the Finder with the iPad
-connected. Home lists that folder, and every Open, Insert, Combine and Save dialog is an in-app
-picker over it (`crates/ui-egui/src/in_app_picker.rs`). The picker can't leave the folder, and Save
-asks before replacing a file.
+The engine writes an appearance stream: a filled outline whose width follows those values. So other viewers show the same varying stroke, and PdfCraft on any platform can still edit it (move it, recolour it, erase part of it).
 
-A PDF shared to PdfCraft from another app (Share ▸ PdfCraft, AirDrop) arrives in
-`Documents/Inbox`. The app moves it into Documents, renaming it `name 2.pdf` if needed, and opens
-it, even while PdfCraft is already open.
-
-Settings and crash recovery live in `Library/Application Support/PdfCraft` inside the sandbox.
+PDFKit keeps `/PCPressure` and the appearance when it re-saves a document (checked with a synthetic file).
 
 ## Build and run
 
-You need macOS with Xcode installed, and the Rust targets (`package.sh` adds them if missing).
+You need Xcode 16 or later and Rust (`rustup`). The project builds the engine itself, in a build phase (`build-engine.sh`) that runs cargo for the platform Xcode is building.
 
-```sh
-# Simulator: build, bundle, boot an iPad simulator, install and launch, with its log here.
-packaging/ios/package.sh --run                        # release build, iPad Air 11-inch (M4)
-packaging/ios/package.sh --debug --run "iPad Air 13-inch (M4)"
-```
+- **In Xcode:** open `apps/pdfcraft-ipad/PdfCraft.xcodeproj`, choose an iPad simulator or your iPad, and press Run.
+- **From the command line** (simulator):
 
-The script takes the iOS SDK and `simctl` from Xcode by path, and compiles and links with the
-active developer tools (Command Line Tools are enough). So it works even before the Xcode licence
-has been accepted.
+  ```sh
+  xcodebuild -project apps/pdfcraft-ipad/PdfCraft.xcodeproj -scheme PdfCraft \
+    -destination 'platform=iOS Simulator,name=iPad Air 11-inch (M4)' build
+  ```
+
+- **UI tests** (XCTest): `xcodebuild test` with the same arguments. They open a sample PDF from the document browser and:
+  - create a new document;
+  - draw in Markup and save the stroke through the engine;
+  - highlight selected text;
+  - redact a selected word (it must be gone from the page's text);
+  - run Reduce File Size and Insert Blank Page, and open the find bar.
 
 ### On your iPad
 
-Apps on an iPad must be signed with an Apple development certificate and a provisioning profile
-that names the device. A free Apple ID works for your own device, though its profiles expire after
-7 days.
+1. In Xcode, select the **PdfCraft** target ▸ **Signing & Capabilities**. Under **Team**, pick your Apple ID; add it in Xcode ▸ Settings ▸ Accounts first if needed. A free Apple ID works for your own iPad, though its profile expires after 7 days.
+2. Connect the iPad and unlock it. On the iPad, turn on **Settings ▸ Privacy & Security ▸ Developer Mode** and restart when asked.
+3. Choose the iPad as the run destination and press Run.
 
-1. Accept the Xcode licence once: `sudo xcodebuild -license accept`.
-2. Connect the iPad, unlock it, and trust the Mac. On the iPad, turn on **Settings ▸ Privacy &
-   Security ▸ Developer Mode** and restart when asked.
-3. Get a profile. In Xcode, sign in under **Settings ▸ Accounts**. Then create any iOS App project
-   with the bundle identifier `ai.storyteller.pdfcraft` (or your own, below), pick your team under
-   **Signing & Capabilities**, and run it once on the iPad. Xcode creates the profile in
-   `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`.
-4. Build, sign and install:
+If the bundle identifier `ai.storyteller.pdfcraft` is taken for your team, change it under the same Signing tab.
 
-   ```sh
-   export IOS_SIGN_IDENTITY="Apple Development: you@example.com (TEAMID1234)"   # security find-identity -v -p codesigning
-   export IOS_PROVISIONING_PROFILE=~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/<uuid>.mobileprovision
-   # export IOS_BUNDLE_ID=com.example.pdfcraft   # if your profile is for another identifier
-   packaging/ios/package.sh --device
-   xcrun devicectl list devices
-   xcrun devicectl device install app --device <device id> target/ios-package/release-iPhoneOS/PdfCraft.app
-   ```
+## What's missing
 
-   `--device` also writes `dist/release/pdfcraft-<version>-ipados.ipa`, which Apple Configurator
-   or TestFlight can install.
+- **Textured inks** (pencil, watercolor, crayon) are saved as solid strokes in their colour, so they look smoother than on screen.
+- **The pixel eraser:** a stroke partly erased with it is saved whole. The object eraser and undo are exact.
+- **OCR, digital signatures, Bates numbering and the rest of PdfCraft's tools** have no iPad interface yet, although the engine has them (any tool can be added to the Tools menu with one `PdfCraftEngine.shared` call).
+- **Not yet tried on hardware.** It has been tested in the iOS Simulator (iPad Air 11-inch M4) and with the engine's Rust tests (`cargo test -p pdfcraft-ipad`). The Simulator has no Apple Pencil, so pressure, hover and squeeze come from PencilKit untested here; the UI tests draw with a finger.
 
-## What doesn't work yet
+## Layout
 
-- **Apple Pencil Pro hover, squeeze and double-tap, and haptics.** These need UIKit interactions
-  (`UIHoverGestureRecognizer`, `UIPencilInteraction`) that winit doesn't provide. Adding them means
-  Objective-C classes, i.e. `unsafe`, in the vendored winit, which needs the owner's sign-off
-  (AGENTS.md §4).
-- **Tilt (altitude and azimuth) and barrel roll.** winit reports the Pencil's altitude, but
-  egui-winit drops it, and azimuth and roll aren't reported at all. Width follows pressure only.
-- **Every Pencil sample.** The Pencil reports 240 times a second, but winit passes one sample per
-  UIKit event, and the stroke takes one per frame (60 on iPad Air, 120 on ProMotion iPads).
-  Strokes are smoothed along a curve through the samples, but very fast flourishes lose detail.
-  Predicted touches (lower latency) aren't used either.
-- **Files outside the app.** Opening files in place from iCloud Drive or other providers needs
-  UIKit's document picker (`unsafe`, as above). Copy files into On My iPad ▸ PdfCraft, or share them
-  to PdfCraft.
-- **Split View, Slide Over and several windows.** The app is full-screen only
-  (`UIRequiresFullScreen`).
-- **The system clipboard.** egui-winit has no iOS clipboard, so copied text stays inside
-  PdfCraft (copy and paste work within the app), and Snapshot and Create ▸ From clipboard, which
-  use arboard, don't work.
-- **The system text-selection menu and handles**, and the system **context menus**. A long press
-  shows PdfCraft's own menu instead.
-- **Tested on hardware:** not yet. It has been tested in the iOS Simulator (iPad Pro 13-inch M5,
-  iPad Air 13-inch M4) and in headless UI tests (`crates/ui-egui/tests/tablet.rs`). The Simulator
-  has no Apple Pencil, so pressure and palm rejection are covered by those tests.
+| Path | What |
+|---|---|
+| `apps/pdfcraft-ipad/PdfCraft.xcodeproj` | The Xcode project (app and UI-test targets, shared scheme) |
+| `apps/pdfcraft-ipad/PdfCraft/` | The SwiftUI app: `PdfCraftApp.swift`, `DocumentView.swift` (toolbar and actions), `PDFController.swift` (PDFKit and PencilKit), `InkConverter.swift`, `PDFFile.swift` (the document), `Engine.swift` (the engine bridge) |
+| `apps/pdfcraft-ipad/src/lib.rs`, `include/pdfcraft.h` | The engine's C interface: one JSON request in, one JSON response out, over the automation tool table |
+| `apps/pdfcraft-ipad/PdfCraftUITests/` | XCTest UI tests |
+
+The C interface is the only `unsafe` code in the workspace: four exported functions, each with its safety contract, and no panic crosses them. The repository owner approved this exception to `AGENTS.md` §4 for the iPad app.

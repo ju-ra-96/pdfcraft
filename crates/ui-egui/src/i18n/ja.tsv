@@ -2141,9 +2141,3 @@ signature pad	Type	入力
 	The field {name} no longer exists.	フィールド {name} はもう存在しません。
 	A selected field has no widget on any page, so the fields can't be edited together.	選択したフィールドの一つがどのページにもウィジェットを持たないため、まとめて編集できません。
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	（{n} 件は描画できる最大サイズの {dpi} dpi で書き出しました）
-# PdfCraft for iPad: the in-app document picker.
-	Documents	書類
-	Choose this folder	このフォルダーを選択
-	Nothing here yet. Put files in Files › On My iPad › PdfCraft.	まだ何もありません。「ファイル」›「このiPad内」›「PdfCraft」にファイルを入れてください。
-	“{name}” already exists. Save again to replace it.	「{name}」はすでにあります。置き換えるには、もう一度保存してください。
-	Only the Apple Pencil draws; fingers scroll and zoom	Apple Pencil でのみ描画し、指でスクロールとズームを行う

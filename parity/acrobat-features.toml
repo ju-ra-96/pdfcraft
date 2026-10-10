@@ -3626,8 +3626,8 @@ milestone = "M5"
 status = "partial"
 commands = ["comment.ink"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::pencil_pressure_draws_a_stroke_that_thickens_where_pressed", "crates/annot/src/tests.rs::erasing_a_pencil_stroke_keeps_each_pieces_pressure", "crates/ui-egui/tests/tablet.rs::the_pencil_draws_ink_that_follows_its_pressure", "crates/ui-egui/tests/tablet.rs::a_palm_on_the_page_while_the_pencil_draws_changes_nothing", "crates/automation/tests/automation.rs::pressure_sensitive_ink_through_tools"]
-notes = "PdfCraft for iPad (apps/pdfcraft-ios): the Pencil draws, fingers scroll, zoom and tap, palms are ignored; stroke width follows pressure (standard /InkList plus /PCPressure, drawn as a filled outline). Missing: tilt and barrel roll (egui-winit drops them), Pencil hover, squeeze and double-tap (need UIKit interactions winit lacks), coalesced 240 Hz samples (one sample per frame). Tested in the iOS Simulator and headless UI tests, not yet on hardware"
+evidence = ["crates/annot/src/tests.rs::pencil_pressure_draws_a_stroke_that_thickens_where_pressed", "crates/annot/src/tests.rs::erasing_a_pencil_stroke_keeps_each_pieces_pressure", "crates/annot/src/tests.rs::pencil_outlines_are_smoothed_and_bounded", "crates/automation/tests/automation.rs::pressure_sensitive_ink_through_tools", "apps/pdfcraft-ipad/src/lib.rs::a_pencil_stroke_round_trips_through_the_engine"]
+notes = "PdfCraft for iPad (apps/pdfcraft-ipad: SwiftUI, PDFKit, PencilKit over the Rust engine): Apple's tool picker, pressure, tilt, hover, squeeze, double-tap, palm rejection and haptics come from PencilKit; strokes are saved as standard /InkList plus /PCPressure (PencilKit's per-point widths), drawn as a filled outline. Also tested end to end by the Xcode UI tests (PdfCraftUITests). Missing: PencilKit's textured inks (pencil, watercolor, crayon) become solid strokes; strokes cut by the pixel eraser are saved whole; not yet tried on hardware"
 
 [[feature]]
 id = "comment.eraser"

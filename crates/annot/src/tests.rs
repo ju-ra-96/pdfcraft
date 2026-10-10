@@ -85,7 +85,7 @@ fn every_tool_creates_a_drawable_comment() {
         Shape::Rectangle { rect: [300.0, 300.0, 200.0, 200.0] },
         Shape::Oval { rect: [300.0, 300.0, 400.0, 350.0] },
         Shape::Line { from: [50.0, 50.0], to: [150.0, 100.0], start: LineEnding::None, end: LineEnding::OpenArrow },
-        Shape::Ink { strokes: vec![vec![[10.0, 10.0], [20.0, 30.0], [30.0, 10.0]], vec![[40.0, 40.0]]] },
+        Shape::Ink { strokes: vec![vec![[10.0, 10.0], [20.0, 30.0], [30.0, 10.0]], vec![[40.0, 40.0]]], pressure: Vec::new() },
         Shape::TextBox { rect: [300.0, 600.0, 500.0, 650.0], font_size: 14.0 },
     ];
     let mut doc = fixture();
@@ -148,7 +148,7 @@ fn every_tool_creates_a_drawable_comment() {
 fn ink_strokes_are_smooth_curves_through_their_points() {
     let mut doc = fixture();
     let strokes = vec![vec![[0.0, 0.0], [10.0, 10.0], [20.0, 0.0]], vec![[30.0, 0.0], [40.0, 10.0]], vec![[50.0, 50.0]]];
-    let i = add_annotation(&mut doc, &new(0, Shape::Ink { strokes }), &meta("ink")).unwrap();
+    let i = add_annotation(&mut doc, &new(0, Shape::Ink { strokes, pressure: Vec::new() }), &meta("ink")).unwrap();
     let ap = ap_content(&doc, &list(&doc, 0)[i]);
     // Tangents at each point run parallel to the chord between its neighbours (the ends use
     // their own point): (0,0)→(10,10) leaves along (10,10) and arrives along (20,0).
@@ -157,7 +157,7 @@ fn ink_strokes_are_smooth_curves_through_their_points() {
     assert!(ap.contains("50 50 m\n50.01 50 l\nS\n"), "{ap}");
     // /Rect holds the whole curve: rising to (20, 20) and dropping to (21, 0), it swings above
     // y 20 (its control point is at y 21.667), beyond the points' own bounds plus the margin.
-    let rise = Shape::Ink { strokes: vec![vec![[0.0, 0.0], [10.0, 10.0], [20.0, 20.0], [21.0, 0.0]]] };
+    let rise = Shape::Ink { strokes: vec![vec![[0.0, 0.0], [10.0, 10.0], [20.0, 20.0], [21.0, 0.0]]], pressure: Vec::new() };
     let j = add_annotation(&mut doc, &new(0, rise), &meta("rise")).unwrap();
     let top = rect(&list(&doc, 0)[j])[3];
     assert!(top >= 21.667 + 2.0 - 0.01, "/Rect top {top}");
@@ -180,7 +180,7 @@ fn invalid_geometry_is_rejected() {
         Shape::TextMarkup { kind: Markup::Highlight, quads: vec![] },
         Shape::Rectangle { rect: [0.0, 0.0, 0.5, 10.0] },
         Shape::Line { from: [1.0, 1.0], to: [1.0, 1.0], start: LineEnding::None, end: LineEnding::None },
-        Shape::Ink { strokes: vec![vec![]] },
+        Shape::Ink { strokes: vec![vec![]], pressure: Vec::new() },
         Shape::Note { at: [f64::NAN, 0.0], icon: NoteIcon::Note },
     ];
     for s in bad {
@@ -241,7 +241,8 @@ fn move_shifts_all_geometry_and_the_popup() {
     let mut doc = fixture();
     let q = [72.0, 712.0, 200.0, 712.0, 72.0, 700.0, 200.0, 700.0];
     let h = add_annotation(&mut doc, &new(0, Shape::TextMarkup { kind: Markup::Highlight, quads: vec![q] }), &meta("h")).unwrap();
-    let i = add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![vec![[10.0, 10.0], [20.0, 20.0]]] }), &meta("i")).unwrap();
+    let i =
+        add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![vec![[10.0, 10.0], [20.0, 20.0]]], pressure: Vec::new() }), &meta("i")).unwrap();
     let n = add_annotation(&mut doc, &new(0, Shape::Note { at: [100.0, 100.0], icon: NoteIcon::Note }), &meta("n")).unwrap();
     for idx in [h, i, n] {
         move_annotation(&mut doc, 0, idx, 10.0, -5.0, &meta("")).unwrap();
@@ -706,7 +707,7 @@ fn files_attach_as_comments() {
 fn the_eraser_cuts_strokes_and_removes_empty_drawings() {
     let mut doc = fixture();
     let line = |y: f64| (0..=10).map(|k| [100.0 + k as f64 * 20.0, y]).collect::<Vec<_>>();
-    let shape = Shape::Ink { strokes: vec![line(500.0), line(400.0)] };
+    let shape = Shape::Ink { strokes: vec![line(500.0), line(400.0)], pressure: Vec::new() };
     let i = add_annotation(&mut doc, &new(0, shape), &meta("i")).unwrap();
     // A vertical swipe through the middle of both lines.
     assert!(erase_ink(&mut doc, 0, i, &[[200.0, 550.0], [200.0, 350.0]], 5.0, &meta("e")).unwrap());
@@ -988,4 +989,137 @@ fn non_markup_annotations_are_not_comments() {
     for s in ["Text", "FreeText", "Highlight", "Ink", "Stamp", "FileAttachment", "Redact", "Sound"] {
         assert!(is_comment_subtype(s), "{s}");
     }
+}
+
+/// Apple Pencil strokes (PdfCraft for iPad): the pressure at each point widens or thins the
+/// stroke. `/InkList` stays standard, the pressures go into `/PCPressure`, and the appearance is
+/// one filled outline per stroke instead of a stroked curve.
+#[test]
+fn pencil_pressure_draws_a_stroke_that_thickens_where_pressed() {
+    let mut doc = fixture();
+    let stroke: Vec<[f64; 2]> = (0..=20).map(|k| [100.0 + k as f64 * 10.0, 300.0]).collect();
+    let pressure: Vec<f32> = (0..=20).map(|k| k as f32 / 20.0).collect();
+    let plain = add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![stroke.clone()], pressure: Vec::new() }), &meta("plain")).unwrap();
+    let pen =
+        add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![stroke.clone()], pressure: vec![pressure.clone()] }), &meta("pen")).unwrap();
+    let doc = reopen(&doc);
+    let all = list(&doc, 0);
+    assert!(!all[plain].contains(b"PCPressure"));
+    let saved: Vec<f64> =
+        all[pen].get(b"PCPressure").unwrap().as_array().unwrap()[0].as_array().unwrap().iter().map(|o| o.as_f64().unwrap()).collect();
+    assert_eq!(saved.len(), 21);
+    assert_eq!((saved[0], saved[10], saved[20]), (0.0, 0.5, 1.0));
+    assert_eq!(all[pen].get(b"InkList"), all[plain].get(b"InkList"), "other viewers see the same stroke");
+    // Filled, not stroked; the widest point (pressure 1) reaches w/2 × 1.65 = 1.65 from the line.
+    let ap = ap_content(&doc, &all[pen]);
+    assert!(ap.ends_with("h\nf\n") && !ap.contains("\nS\n"), "{ap}");
+    assert!(ap.contains("300 301.65 l\n"), "{ap}");
+    assert!(ap.contains("100 300.35 m\n"), "the lightest point is 0.35 wide: {ap}");
+    // Room for the widest point, beyond the plain stroke's rectangle.
+    assert!(rect(&all[pen])[3] >= 301.65 && rect(&all[pen])[3] > rect(&all[plain])[3]);
+}
+
+#[test]
+fn even_or_mismatched_pressure_draws_a_plain_stroke() {
+    let mut doc = fixture();
+    let stroke = vec![[10.0, 10.0], [20.0, 20.0], [30.0, 10.0]];
+    for pressure in [vec![vec![0.4f32, 0.4, 0.4]], vec![vec![0.1, 0.9]], vec![vec![0.1, f32::NAN, 0.9]], vec![vec![0.1, 0.5, 0.9], vec![0.2]]] {
+        let i = add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![stroke.clone()], pressure: pressure.clone() }), &meta("i")).unwrap();
+        let d = &list(&doc, 0)[i];
+        assert!(!d.contains(b"PCPressure"), "{pressure:?}");
+        assert!(ap_content(&doc, d).contains("\nS\n"));
+    }
+}
+
+#[test]
+fn erasing_a_pencil_stroke_keeps_each_pieces_pressure() {
+    let mut doc = fixture();
+    let stroke: Vec<[f64; 2]> = (0..=10).map(|k| [100.0 + k as f64 * 20.0, 500.0]).collect();
+    let pressure: Vec<f32> = (0..=10).map(|k| k as f32 / 10.0).collect();
+    let i = add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![stroke], pressure: vec![pressure] }), &meta("i")).unwrap();
+    assert!(erase_ink(&mut doc, 0, i, &[[200.0, 550.0], [200.0, 450.0]], 5.0, &meta("e")).unwrap());
+    let doc = reopen(&doc);
+    let d = &list(&doc, 0)[i];
+    let ink = d.get(b"InkList").unwrap().as_array().unwrap();
+    let pc = d.get(b"PCPressure").unwrap().as_array().unwrap();
+    assert_eq!(ink.len(), 2, "cut in two");
+    assert_eq!(pc.len(), 2);
+    for (s, p) in ink.iter().zip(pc) {
+        let (s, p) = (s.as_array().unwrap(), p.as_array().unwrap());
+        assert_eq!(s.len(), p.len() * 2, "one pressure per point");
+        // Pressure rises left to right with x, as drawn: x 100 → 0, x 300 → 1.
+        for (xy, f) in s.chunks(2).zip(p) {
+            let (x, f) = (xy[0].as_f64().unwrap(), f.as_f64().unwrap());
+            assert!((f - (x - 100.0) / 200.0).abs() < 0.01, "x {x}: {f}");
+        }
+    }
+    assert!(ap_content(&doc, d).ends_with("f\n"));
+}
+
+/// Pressures in a file are untrusted: wrong lengths, non-numbers, infinities and nesting fall
+/// back to the plain stroke without failing.
+#[test]
+fn malformed_pressure_in_a_file_falls_back_to_the_plain_stroke() {
+    let r = |v: f64| Object::Real(v);
+    let arr = Object::Array;
+    let bad = [
+        arr(vec![arr(vec![r(0.1), r(0.9)])]),
+        arr(vec![Object::name("x")]),
+        arr(vec![arr(vec![r(0.1), Object::name("N"), r(0.9)])]),
+        r(0.5),
+        arr(vec![arr(vec![r(0.1), r(f64::INFINITY), r(0.3)])]),
+        arr(vec![arr(vec![arr(vec![r(0.1)])])]),
+        arr(vec![arr(vec![r(0.1), r(0.5), r(0.9)]), arr(vec![r(0.2)])]),
+    ];
+    for pc in bad {
+        let mut d = Dict::new();
+        d.set(b"Subtype".to_vec(), Object::name("Ink"));
+        d.set(b"Rect".to_vec(), num_array(&[0.0, 0.0, 100.0, 100.0]));
+        d.set(b"C".to_vec(), num_array(&[0.0, 0.0, 1.0]));
+        d.set(b"InkList".to_vec(), Object::Array(vec![num_array(&[10.0, 10.0, 50.0, 50.0, 90.0, 10.0])]));
+        d.set(b"PCPressure".to_vec(), pc.clone());
+        let ap = appearance::build(&d).expect("drawn");
+        let text = String::from_utf8_lossy(&ap.decoded().unwrap()).into_owned();
+        assert!(text.contains("\nS\n"), "{pc:?}: {text}");
+    }
+}
+
+#[test]
+fn widening_a_pencil_stroke_grows_its_rectangle() {
+    let mut doc = fixture();
+    let stroke: Vec<[f64; 2]> = (0..=4).map(|k| [100.0 + k as f64 * 10.0, 300.0]).collect();
+    let i =
+        add_annotation(&mut doc, &new(0, Shape::Ink { strokes: vec![stroke], pressure: vec![vec![0.0, 0.5, 1.0, 0.5, 0.0]] }), &meta("i")).unwrap();
+    set_style(&mut doc, 0, i, None, None, Some(10.0), None, &meta("w")).unwrap();
+    let top = rect(&list(&doc, 0)[i])[3];
+    assert!(top >= 300.0 + 5.0 * MAX_PRESSURE_FACTOR, "{top}");
+}
+
+#[test]
+fn pressure_width_factor_is_bounded() {
+    assert_eq!(pressure_width_factor(0.0), MIN_PRESSURE_FACTOR);
+    assert_eq!(pressure_width_factor(1.0), MAX_PRESSURE_FACTOR);
+    assert!((pressure_width_factor(0.25) - 1.0).abs() < 1e-9, "normal writing draws the set width");
+    for p in [f32::NAN, f32::INFINITY, -1.0, 7.0] {
+        let f = pressure_width_factor(p);
+        assert!((MIN_PRESSURE_FACTOR..=MAX_PRESSURE_FACTOR).contains(&f), "{p}: {f}");
+    }
+}
+
+/// A Pencil stroke sampled once a frame has corners; its outline follows the curve through the
+/// samples instead. A huge stroke (untrusted file) is subdivided less, never without bound.
+#[test]
+fn pencil_outlines_are_smoothed_and_bounded() {
+    let zigzag = [[0.0, 0.0], [10.0, 10.0], [20.0, 0.0], [30.0, 10.0]];
+    let outline = appearance::pressure_outline(&zigzag, &[1.0, 2.0, 2.0, 1.0]);
+    let lines = outline.matches(" l\n").count();
+    assert!(lines > 2 * zigzag.len() + 6, "subdivided: {lines} lines\n{outline}");
+    let huge: Vec<[f64; 2]> = (0..200_000).map(|k| [k as f64 * 0.1, (k % 7) as f64]).collect();
+    let radii = vec![1.0; huge.len()];
+    let started = std::time::Instant::now();
+    let outline = appearance::pressure_outline(&huge, &radii);
+    assert!(outline.matches(" l\n").count() <= 2 * huge.len() + 2, "not subdivided past the cap");
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(appearance::pressure_outline(&[], &[]), "");
+    assert!(appearance::pressure_outline(&[[5.0, 5.0]], &[2.0]).ends_with("h\n"), "a dot");
 }

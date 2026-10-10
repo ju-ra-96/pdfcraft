@@ -30,7 +30,7 @@ PdfCraft is a clean-room, open-source, Rust-native PDF application targeting Ado
   - Handle lock poisoning.
   - No `unsafe` (`unsafe_code = "forbid"`).
   - Every crash fix gets a synthetic regression test. See `AGENTS.md` §4 (and, for team members, the internal `craftrules/standards/never-crash.md`).
-- **Rust only** in the product and build (`xtask`). No handwritten JS/TS.
+- **Rust only** in the product and build (`xtask`). No handwritten JS/TS. The one exception, the owner's decision (2026-10-10): the iPad app `apps/pdfcraft-ipad` is SwiftUI on Apple's frameworks (PDFKit, PencilKit), over the Rust engine through a small C interface (`apps/pdfcraft-ipad/src/lib.rs`, the workspace's only `unsafe`). See `docs/ipad.md`.
 - **Quality gates** before every commit: `cargo fmt --check`, `cargo clippy --workspace -- -D warnings`, `cargo test --workspace`, and the wasm check once `xtask ci` exists (M0).
 - **Commits:** one task id per commit (e.g. `M1.4: xref stream reader`). Commit only green states. End messages with the attribution line required by the environment.
 

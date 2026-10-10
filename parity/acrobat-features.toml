@@ -3618,6 +3618,18 @@ evidence = ["crates/ui-egui/tests/comments.rs::shapes_and_ink_are_drawn_by_dragg
 notes = "one ink annotation per stroke; strokes are drawn as smooth curves through their points, as in Acrobat"
 
 [[feature]]
+id = "comment.pencil-pressure"
+title = "Apple Pencil drawing with pressure (iPad)"
+area = "E"
+tier = "P2"
+milestone = "M5"
+status = "partial"
+commands = ["comment.ink"]
+tools = ["comment_add"]
+evidence = ["crates/annot/src/tests.rs::pencil_pressure_draws_a_stroke_that_thickens_where_pressed", "crates/annot/src/tests.rs::erasing_a_pencil_stroke_keeps_each_pieces_pressure", "crates/annot/src/tests.rs::pencil_outlines_are_smoothed_and_bounded", "crates/automation/tests/automation.rs::pressure_sensitive_ink_through_tools", "apps/pdfcraft-ipad/src/lib.rs::a_pencil_stroke_round_trips_through_the_engine"]
+notes = "PdfCraft for iPad (apps/pdfcraft-ipad: SwiftUI, PDFKit, PencilKit over the Rust engine): Apple's tool picker, pressure, tilt, hover, squeeze, double-tap, palm rejection and haptics come from PencilKit; strokes are saved as standard /InkList plus /PCPressure (PencilKit's per-point widths), drawn as a filled outline. Also tested end to end by the Xcode UI tests (PdfCraftUITests). Textured inks (pencil, watercolor, crayon) are saved as PencilKit's own picture of the stroke (a custom stamp in its rectangle), and strokes cut by the pixel eraser keep only their visible parts. Missing: textured strokes can't be recoloured; not yet tried on hardware"
+
+[[feature]]
 id = "comment.eraser"
 title = "Eraser for ink strokes"
 area = "E"
@@ -6377,9 +6389,9 @@ tier = "P0"
 milestone = "M10"
 status = "shipped"
 commands = ["ocr.recognize"]
-tools = ["ocr_recognize", "ocr_status"]
-evidence = ["crates/engine/src/tests.rs::recognize_text_makes_a_scanned_page_searchable", "crates/automation/tests/automation.rs::ocr_tools_make_a_scan_searchable", "crates/ui-egui/tests/ocr.rs::recognize_text_dialog_adds_searchable_text"]
-notes = "ocrs engine (MIT/Apache) with CC-BY-SA models fetched by `cargo xtask models`; the desktop release packages ship them (#103; packaging/env.sh stage_models), the web build does not yet; runs on a worker thread with progress; one undoable step; pages with text are skipped."
+tools = ["ocr_recognize", "ocr_status", "ocr_add_words"]
+evidence = ["crates/engine/src/tests.rs::recognize_text_makes_a_scanned_page_searchable", "crates/automation/tests/automation.rs::ocr_tools_make_a_scan_searchable", "crates/ui-egui/tests/ocr.rs::recognize_text_dialog_adds_searchable_text", "crates/automation/tests/automation.rs::recognized_words_from_elsewhere_become_searchable_text"]
+notes = "ocrs engine (MIT/Apache) with CC-BY-SA models fetched by `cargo xtask models`; the desktop release packages ship them (#103; packaging/env.sh stage_models), the web build does not yet; runs on a worker thread with progress; one undoable step; pages with text are skipped. On iPad, Apple's Vision reads the pages and ocr_add_words writes the same invisible text layer (UI test testRecognizeTextMakesScansSearchable)."
 
 [[feature]]
 id = "ocr.recognize-range"

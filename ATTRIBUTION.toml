@@ -2875,6 +2875,17 @@ usage = "Linux hicolor theme icon (packaging/linux/ai.storyteller.pdfcraft.deskt
 sha256 = "5ede733e93b96f4eb8d94299232cf2f9605fa19b0d913f95fe9828c316a2d066"
 
 [[asset]]
+path = "apps/pdfcraft-ipad/PdfCraft/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+title = "PdfCraft app icon, iPad (1024 px)"
+author = "PdfCraft contributors (drawn by the project owner in ArtCraft; vectorised with craftrules vectorize_tile.py)"
+source = "Contributor-original: assets/app-icon/hicolor/512x512 scaled to 1024 px on the tile's own green (#12a58a), opaque, as iPadOS requires"
+licence = "MIT OR Apache-2.0"
+licence_file = "assets/app-icon/LICENSE.txt"
+kind = "icon"
+usage = "iPad app icon (apps/pdfcraft-ipad)"
+sha256 = "5cf1b0d923a30ab7297898ddb4a37fcf868d4b5e95264bfec54043387dbcb60c"
+
+[[asset]]
 path = "assets/app-icon/hicolor/scalable/apps/ai.storyteller.pdfcraft.svg"
 title = "PdfCraft app icon (Linux scalable)"
 author = "PdfCraft contributors (drawn by the project owner in ArtCraft; vectorised with craftrules vectorize_tile.py)"

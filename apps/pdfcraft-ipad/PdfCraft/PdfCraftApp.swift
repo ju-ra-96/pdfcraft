@@ -15,6 +15,8 @@ struct PdfCraftApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { PDFFile() }) { configuration in
             DocumentView(file: configuration.document)
+                // PdfCraft green everywhere (selection, buttons, sheets), whatever the system tint.
+                .tint(Color("AccentColor"))
         }
     }
 }

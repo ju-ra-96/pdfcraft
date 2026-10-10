@@ -2311,6 +2311,22 @@ fn stamps_through_tools() {
     assert!(matches!(a.call("stamp_custom", &json!({ "doc": doc, "page": 1, "path": "nope.png", "at": [1, 1] })), Err(ToolError::Failed(_))));
 }
 
+/// A custom stamp can fill an exact rectangle (the iPad app places PencilKit's textured strokes
+/// so); without `at` or `rect`, or with a degenerate one, the error says what is needed.
+#[test]
+fn custom_stamps_fill_a_given_rectangle() {
+    let dir = workdir("stamp-rect");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "stamp_custom", json!({ "doc": doc, "page": 1, "path": "b.pdf", "rect": [220, 140, 20, 40], "name": "Stroke" }));
+    let list = ok(&mut a, "comment_list", json!({ "doc": doc, "page": 1 }));
+    let stamp = list["comments"].as_array().unwrap().iter().find(|c| c["type"] == "Stamp").unwrap().clone();
+    assert_eq!(stamp["rect"], json!([20.0, 40.0, 220.0, 140.0]), "{stamp}");
+    for bad in [json!({ "doc": doc, "page": 1, "path": "b.pdf" }), json!({ "doc": doc, "page": 1, "path": "b.pdf", "rect": [10, 10, 10.5, 50] })] {
+        assert!(matches!(a.call("stamp_custom", &bad), Err(ToolError::InvalidArgs(_))), "{bad}");
+    }
+}
+
 #[test]
 fn organizing_with_filters_bookmark_splits_and_extract_options() {
     let dir = workdir("organize2");
@@ -3622,4 +3638,32 @@ fn pressure_sensitive_ink_through_tools() {
         let r = a.call("comment_add", &json!({ "doc": doc, "page": 1, "type": "ink", "strokes": stroke(300.0), "pressure": bad }));
         assert!(matches!(&r, Err(ToolError::InvalidArgs(m)) if m.contains("pressure")), "{bad}: {r:?}");
     }
+}
+
+/// Words from an outside recogniser (Apple's Vision on iPad) become invisible, searchable text
+/// in their boxes; bad words are refused with a reason, and the edit is undoable.
+#[test]
+fn recognized_words_from_elsewhere_become_searchable_text() {
+    let dir = workdir("ocr-words");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let before = page_text(&mut a, doc)[0].clone();
+    let r = ok(
+        &mut a,
+        "ocr_add_words",
+        json!({ "doc": doc, "page": 1, "words": [
+            { "text": "Quokka", "rect": [40, 200, 110, 218] },
+            { "text": "sanctuary", "rect": [116, 200, 200, 218] },
+        ] }),
+    );
+    assert_eq!(r["words"], 2, "{r}");
+    let after = page_text(&mut a, doc)[0].clone();
+    assert!(after.contains("Quokka") && after.contains("sanctuary") && !before.contains("Quokka"), "{after}");
+    let found = ok(&mut a, "text_find", json!({ "doc": doc, "query": "quokka" }));
+    assert_eq!(found["count"], 1, "{found}");
+    for bad in [json!([{ "text": "", "rect": [0, 0, 10, 10] }]), json!([{ "text": "x", "rect": [10, 10, 5, 20] }]), json!([{ "text": "x" }])] {
+        assert!(matches!(a.call("ocr_add_words", &json!({ "doc": doc, "page": 1, "words": bad })), Err(ToolError::InvalidArgs(_))), "{bad}");
+    }
+    assert_eq!(ok(&mut a, "edit_undo", json!({ "doc": doc }))["undone"], "Recognize text");
+    assert!(!page_text(&mut a, doc)[0].contains("Quokka"));
 }

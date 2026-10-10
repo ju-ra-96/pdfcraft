@@ -68,7 +68,7 @@ fn hex(c: [f32; 3]) -> String {
     format!("#{:02X}{:02X}{:02X}", b(c[0]), b(c[1]), b(c[2]))
 }
 
-fn to_user(p: &PageInfo, x: f64, y: f64) -> [f64; 2] {
+pub(crate) fn to_user(p: &PageInfo, x: f64, y: f64) -> [f64; 2] {
     let [ux, uy] = p.view_to_user(x as f32, y as f32);
     [ux as f64, uy as f64]
 }
@@ -618,11 +618,24 @@ impl Automation {
         let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let name = a.opt_str("name")?.map(str::to_owned).unwrap_or_else(|| file.rsplit_once('.').map_or(file.clone(), |(s, _)| s.to_owned()));
-        let [x, y] = a.need::<2>("at", "a stamp (its centre)")?;
-        let [ux, uy] = to_user(&info, x, y);
+        // A rectangle to fill, or a centre (the engine sizes it: a degenerate rectangle).
+        let rect = match a.get("rect") {
+            Some(_) => {
+                let r = rect_to_user(&info, a.need::<4>("rect", "a stamp")?);
+                if !r.iter().all(|v| v.is_finite()) || r[2] - r[0] < 1.0 || r[3] - r[1] < 1.0 {
+                    return Err(ToolError::InvalidArgs("rect must be at least 1 × 1 points".into()));
+                }
+                r
+            }
+            None => {
+                let [x, y] = a.need::<2>("at", "a stamp (its centre), or give rect")?;
+                let [ux, uy] = to_user(&info, x, y);
+                [ux, uy, ux, uy]
+            }
+        };
         let edit = Edit::AddCustomStamp {
             page,
-            rect: [ux, uy, ux, uy],
+            rect,
             name,
             file: pdfcraft_engine::MarkFile {
                 name: file,

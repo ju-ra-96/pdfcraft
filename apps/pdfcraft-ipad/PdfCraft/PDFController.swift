@@ -37,6 +37,10 @@ final class PDFController: NSObject, ObservableObject {
         pdfView.isFindInteractionEnabled = true
         pdfView.backgroundColor = .secondarySystemBackground
         pdfView.pageOverlayViewProvider = self
+        if ProcessInfo.processInfo.arguments.contains("-PdfCraftUITestPencilInk") {
+            // UI tests can't reach the tool picker (it runs out of process): start with the pencil.
+            toolPicker.selectedToolItem = PKToolPickerInkingItem(type: .pencil, color: .systemIndigo, width: 12)
+        }
         NotificationCenter.default.addObserver(self, selector: #selector(selectionChanged), name: .PDFViewSelectionChanged, object: pdfView)
         NotificationCenter.default.addObserver(self, selector: #selector(pageChanged), name: .PDFViewPageChanged, object: pdfView)
     }
@@ -100,25 +104,36 @@ final class PDFController: NSObject, ObservableObject {
         return canvas
     }
 
-    /// Save every pending stroke into the document as Ink, in one undo step.
+    /// Save every pending stroke into the document, in one undo step: Ink, or for textured
+    /// inks a picture ([`InkConverter`]).
     func commitStrokes() {
         guard let document = pdfView.document else { return }
-        var calls: [(PKStroke, Int)] = []
+        var saves: [InkConverter.Save] = []
         for (_, entry) in canvases {
             let index = document.index(for: entry.page)
             guard index != NSNotFound else { continue }
-            for stroke in entry.canvas.drawing.strokes { calls.append((stroke, index + 1)) }
+            for stroke in entry.canvas.drawing.strokes {
+                if let save = InkConverter.save(stroke, page: index + 1, author: author) { saves.append(save) }
+            }
         }
-        guard !calls.isEmpty else { return }
-        let author = self.author
-        let strokes = calls
         for (_, entry) in canvases { entry.canvas.drawing = PKDrawing() }
         pendingStrokes = 0
+        guard !saves.isEmpty else { return }
+        let author = self.author
         engineEdit?(String(localized: "Draw")) { data in
-            try PdfCraftEngine.shared.edit(data) { doc in
-                for (stroke, page) in strokes {
-                    if let args = InkConverter.arguments(for: stroke, page: page, doc: doc, author: author) {
-                        try PdfCraftEngine.shared.json("comment_add", args)
+            let engine = PdfCraftEngine.shared
+            return try engine.edit(data) { doc in
+                for save in saves {
+                    switch save {
+                    case .ink(var args):
+                        args["doc"] = doc
+                        try engine.json("comment_add", args)
+                    case .picture(let page, let png, let rect):
+                        let name = "\(UUID().uuidString).png"
+                        let file = engine.workDir.appendingPathComponent(name)
+                        try png.write(to: file, options: .atomic)
+                        defer { try? FileManager.default.removeItem(at: file) }
+                        try engine.json("stamp_custom", ["doc": doc, "page": page, "path": name, "rect": rect, "name": String(localized: "Drawing"), "author": author])
                     }
                 }
             }

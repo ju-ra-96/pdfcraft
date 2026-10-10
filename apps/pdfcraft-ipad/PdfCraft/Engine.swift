@@ -67,7 +67,8 @@ final class PdfCraftEngine: @unchecked Sendable {
         }
         defer { _ = try? json("doc_close", ["doc": doc, "discard_changes": true]) }
         try body(doc)
-        try json("doc_save", ["doc": doc, "path": output.lastPathComponent])
+        // An incremental update: the original bytes stay as they were, so signatures stay valid.
+        try json("doc_save", ["doc": doc, "path": output.lastPathComponent, "full": false])
         return try Data(contentsOf: output)
     }
 
